@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { STAGES, type StageValues } from "./funnel";
-import type { Period } from "./mock-data";
+import type { Period } from "./period";
 
 // Таблица public.funnel_periods (миграция в репозитории kaizenhub).
 interface Row {
@@ -25,7 +25,6 @@ function toPeriod(row: Row): Period {
     sales: row.sales ?? {},
     extra: row.extra ?? {},
     rnp: row.rnp ?? "",
-    uploaded: true,
     saved: true,
   };
 }
@@ -40,6 +39,17 @@ export async function insertPeriod(sb: SupabaseClient, p: Period): Promise<Perio
   const { data, error } = await sb
     .from("funnel_periods")
     .insert({ label: p.label, dates: p.dates, stage_values: p.values, sales: p.sales, extra: p.extra, rnp: p.rnp })
+    .select(COLUMNS)
+    .single();
+  if (error) throw error;
+  return toPeriod(data as Row);
+}
+
+export async function updatePeriod(sb: SupabaseClient, p: Period): Promise<Period> {
+  const { data, error } = await sb
+    .from("funnel_periods")
+    .update({ label: p.label, dates: p.dates, stage_values: p.values, sales: p.sales, extra: p.extra, rnp: p.rnp })
+    .eq("id", p.id)
     .select(COLUMNS)
     .single();
   if (error) throw error;

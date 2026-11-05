@@ -1,5 +1,5 @@
 import { fmtInt, fmtPct, type StageResult } from "@/lib/funnel";
-import type { Period } from "@/lib/mock-data";
+import type { Period } from "@/lib/period";
 import { cn } from "@/lib/utils";
 import { STATUS_STYLES } from "./status";
 
@@ -33,7 +33,7 @@ export function FunnelSteps({ stages, extra }: { stages: StageResult[]; extra: P
                 <div className="shrink-0 text-right text-sm tabular-nums">
                   <span className="font-semibold">{fmtInt(s.value)}</span>
                   {s.cr !== null && <span className={cn("ml-2", st.text)}>{fmtPct(s.cr)}</span>}
-                  {s.benchmark !== null && s.cr !== null && (
+                  {s.benchmark !== null && s.cr !== null && !s.gap && (
                     <span className="ml-1 text-xs text-muted-foreground">({fmtPct(s.benchmark)})</span>
                   )}
                 </div>
@@ -42,6 +42,11 @@ export function FunnelSteps({ stages, extra }: { stages: StageResult[]; extra: P
                 <div className={cn("h-full rounded-full transition-all", st.bar)} style={{ width: `${width}%` }} />
               </div>
               {s.missing && <div className="mt-1 text-xs text-muted-foreground">Нет данных — шаг пропущен в расчёте конверсий.</div>}
+              {s.gap && s.cr !== null && (
+                <div className="mt-1 text-xs text-muted-foreground">
+                  Конверсия через пропущенные шаги — с эталоном не сравниваем.
+                </div>
+              )}
               {s.external && (
                 <div className="mt-1 text-xs text-muted-foreground">
                   Больше прошлого шага — сюда приходят люди из других источников, конверсию не считаем.

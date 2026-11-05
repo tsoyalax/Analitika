@@ -2,13 +2,12 @@ import { fmtRub, type StageValues } from "@/lib/funnel";
 import { PRODUCT, type Economics } from "@/lib/products";
 
 export function EconomicsCard({ eco, values }: { eco: Economics; values: StageValues }) {
-  const perBot = values.bot ? eco.revenue / values.bot : 0;
-  const perThousand = values.reach ? (eco.revenue / values.reach) * 1000 : 0;
+  const rub = (n: number | null) => (eco.sales && n !== null ? fmtRub(n) : "—");
   const metrics = [
-    { label: "Выручка", value: fmtRub(eco.revenue) },
-    { label: "Средний чек", value: fmtRub(eco.avgCheck) },
-    { label: "На 1 человека в боте", value: fmtRub(perBot) },
-    { label: "На 1000 охватов", value: fmtRub(perThousand) },
+    { label: "Выручка", value: rub(eco.revenue) },
+    { label: "Средний чек", value: rub(eco.avgCheck) },
+    { label: "На 1 человека в боте", value: rub(values.bot ? eco.revenue / values.bot : null) },
+    { label: "На 1000 охватов", value: rub(values.reach ? (eco.revenue / values.reach) * 1000 : null) },
   ];
   return (
     <div className="rounded-xl border bg-card p-4">
@@ -26,6 +25,11 @@ export function EconomicsCard({ eco, values }: { eco: Economics; values: StageVa
           </div>
         ))}
       </div>
+      {!eco.sales && (
+        <p className="mt-3 text-xs text-muted-foreground">
+          Укажите продажи по тарифам (кнопка ✎ у периода), чтобы посчитать выручку и средний чек.
+        </p>
+      )}
       <div className="mt-4 space-y-2">
         {eco.mix.map((t) => (
           <div key={t.id} className="text-xs">

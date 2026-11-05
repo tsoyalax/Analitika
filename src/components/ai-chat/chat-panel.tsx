@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { localAnalysis } from "@/lib/analysis";
 import { BASE_PATH } from "@/lib/config";
 import { accessToken } from "@/lib/supabase";
-import type { Period } from "@/lib/mock-data";
+import type { Period } from "@/lib/period";
 import { cn } from "@/lib/utils";
 import { Markdown } from "./markdown";
 
