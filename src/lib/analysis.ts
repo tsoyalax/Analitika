@@ -9,12 +9,12 @@ import {
   type StageResult,
 } from "./funnel";
 import type { Period } from "./period";
-import { economics, PRODUCT } from "./products";
+import { economics, type Product } from "./products";
 
 /** Текстовый срез воронки — контекст для AI-ассистента. */
-export function funnelContext(period: Period, rnp: string): string {
+export function funnelContext(period: Period, rnp: string, product: Product): string {
   const stages = analyzeFunnel(period.values);
-  const eco = economics(period.sales);
+  const eco = economics(period.sales, product.tariffs);
   const lines = stages.map((s) => {
     const cr = s.missing
       ? "нет данных"
@@ -36,7 +36,7 @@ export function funnelContext(period: Period, rnp: string): string {
   ].filter(Boolean);
 
   return [
-    `Продукт: «${PRODUCT.name}» (${PRODUCT.url}). ${PRODUCT.description}`,
+    `Продукт: «${product.name}»${product.url ? ` (${product.url})` : ""}. ${product.description}`,
     `Тарифы: ${eco.mix.map((t) => `${t.name} — ${fmtRub(t.price)}`).join("; ")}.`,
     "",
     `Период: ${period.label}${period.dates ? ` (${period.dates})` : ""}.`,
@@ -103,13 +103,13 @@ const SOLUTIONS: Partial<Record<StageResult["id"], { quick: string; content: str
 };
 
 /** Анализ без AI — когда ключ API не задан. Тот же формат, что у модели. */
-export function localAnalysis(period: Period): string {
+export function localAnalysis(period: Period, product: Product): string {
   const stages = analyzeFunnel(period.values);
   const worst = worstStage(stages);
   if (!worst || (worst.deviation ?? 0) >= 0) {
     return "🔍 **Диагностика:** все этапы на уровне эталона или выше.\n\n💡 **Гипотеза:** воронка сбалансирована — рост даст масштабирование охватов.\n\n🛠️ **Альтернативные решения:**\n1. **Быстрое:** увеличить частоту Reels.\n2. **Контентное:** повторить форматы, которые дали лучшие охваты.\n3. **Техническое:** настроить сквозную аналитику по каждому ролику.";
   }
-  const eco = economics(period.sales);
+  const eco = economics(period.sales, product.tariffs);
   const extra = extraPaymentsAtBenchmark(stages, worst);
   const s = SOLUTIONS[worst.id];
   const prev = stages[stages.findIndex((x) => x.id === worst.id) - 1];

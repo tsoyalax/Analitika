@@ -2,6 +2,7 @@ import type { ExtractResult } from "@/app/api/extract/route";
 import { BASE_PATH } from "./config";
 import { STAGES } from "./funnel";
 import { draftPeriod, type Period } from "./period";
+import type { Tariff } from "./products";
 import { accessToken } from "./supabase";
 
 export const MAX_SCREENSHOTS = 6;
@@ -24,14 +25,17 @@ async function shrink(file: File): Promise<{ mediaType: string; data: string }> 
 }
 
 /** Скриншоты → Claude распознаёт цифры → черновик периода для проверки в форме. */
-export async function periodFromScreenshots(files: File[]): Promise<{ period: Period; notes: string }> {
+export async function periodFromScreenshots(
+  files: File[],
+  tariffs: Tariff[],
+): Promise<{ period: Period; notes: string }> {
   if (files.length > MAX_SCREENSHOTS) throw new Error(`Не больше ${MAX_SCREENSHOTS} скриншотов за раз.`);
   const images = await Promise.all(files.map(shrink));
   const token = await accessToken();
   const res = await fetch(`${BASE_PATH}/api/extract`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...(token && { Authorization: `Bearer ${token}` }) },
-    body: JSON.stringify({ images }),
+    body: JSON.stringify({ images, tariffs: tariffs.map(({ name, price }) => ({ name, price })) }),
   });
   const data = await res.json().catch(() => ({}));
   if (res.status === 401) throw new Error("Войдите в KaizenHub, чтобы распознавать скриншоты.");
@@ -49,7 +53,12 @@ export async function periodFromScreenshots(files: File[]): Promise<{ period: Pe
       label: r.label.trim(),
       dates: r.dates.trim(),
       values,
-      sales: defined(r.sales),
+      sales: Object.fromEntries(
+        r.sales.flatMap((s) => {
+          const t = tariffs.find((x) => x.name.trim().toLowerCase() === s.tariff.trim().toLowerCase());
+          return t && s.count >= 0 ? [[t.id, Math.round(s.count)]] : [];
+        }),
+      ),
       extra: defined(r.extra),
     }),
     notes: r.notes,

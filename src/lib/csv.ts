@@ -1,19 +1,20 @@
 import { STAGES, type StageId, type StageValues } from "./funnel";
 import { draftPeriod, type Period } from "./period";
-import { TARIFFS, type SalesMix } from "./products";
+import type { SalesMix, Tariff } from "./products";
 
 // Формат: по строке на метрику, «ключ,значение» (разделитель , ; или таб).
-// Ключ — id этапа (reach, dm, bot…) или его название, id/название тарифа,
+// Ключ — id этапа (reach, dm, bot…) или его название, название тарифа (продажи, шт.),
 // либо automation_cr / article_readers / article_views / total_payments.
-export const CSV_TEMPLATE = [
-  "metric,value",
-  ...STAGES.map((s) => `${s.id},`),
-  ...TARIFFS.map((t) => `${t.id},`),
-  "automation_cr,",
-  "article_readers,",
-  "article_views,",
-  "total_payments,",
-].join("\n");
+export const csvTemplate = (tariffs: Tariff[]) =>
+  [
+    "metric;value",
+    ...STAGES.map((s) => `${s.id};`),
+    ...tariffs.map((t) => `${t.name.replace(/;/g, ",")};`),
+    "automation_cr;",
+    "article_readers;",
+    "article_views;",
+    "total_payments;",
+  ].join("\n");
 
 const norm = (s: string) => s.trim().toLowerCase().replace(/^["']|["']$/g, "").replace(/ё/g, "е");
 
@@ -31,7 +32,7 @@ export interface CsvResult {
   errors: string[];
 }
 
-export function parseFunnelCsv(text: string, label: string): CsvResult {
+export function parseFunnelCsv(text: string, label: string, tariffs: Tariff[]): CsvResult {
   const values: Partial<StageValues> = {};
   const sales: SalesMix = {};
   const extra: Period["extra"] = {};
@@ -56,7 +57,7 @@ export function parseFunnelCsv(text: string, label: string): CsvResult {
       values[stage.id as StageId] = num;
       continue;
     }
-    const tariff = TARIFFS.find((t) => t.id === key || norm(t.name).startsWith(key));
+    const tariff = tariffs.find((t) => t.id === key || norm(t.name) === key || norm(t.name).startsWith(key));
     if (tariff) {
       sales[tariff.id] = num;
       continue;

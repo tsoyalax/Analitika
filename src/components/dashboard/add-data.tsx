@@ -4,11 +4,12 @@ import { useRef, useState } from "react";
 import { Download, FileUp, ImagePlus, Loader2, Plus } from "lucide-react";
 import { MAX_SCREENSHOTS } from "@/lib/screenshots";
 import { Button } from "@/components/ui/button";
-import { CSV_TEMPLATE, parseFunnelCsv } from "@/lib/csv";
+import { csvTemplate, parseFunnelCsv } from "@/lib/csv";
 import type { Period } from "@/lib/period";
+import type { Tariff } from "@/lib/products";
 
-export function downloadTemplate() {
-  const url = URL.createObjectURL(new Blob([CSV_TEMPLATE], { type: "text/csv" }));
+export function downloadTemplate(tariffs: Tariff[]) {
+  const url = URL.createObjectURL(new Blob([csvTemplate(tariffs)], { type: "text/csv" }));
   const a = Object.assign(document.createElement("a"), { href: url, download: "funnel-template.csv" });
   a.click();
   URL.revokeObjectURL(url);
@@ -19,12 +20,14 @@ export function AddData({
   onManual,
   onCsv,
   onScreenshots,
+  tariffs,
   size = "sm",
 }: {
   onManual: () => void;
   onCsv: (p: Period) => void;
   /** Распознать цифры со снимков; ошибка показывается под кнопками. */
   onScreenshots: (files: File[]) => Promise<void>;
+  tariffs: Tariff[];
   size?: "sm" | "default";
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
@@ -34,7 +37,7 @@ export function AddData({
 
   async function handleFile(file: File) {
     const label = file.name.replace(/\.csv$/i, "").slice(0, 60) || "Период из CSV";
-    const { period, errors } = parseFunnelCsv(await file.text(), label);
+    const { period, errors } = parseFunnelCsv(await file.text(), label, tariffs);
     setErrors(errors);
     if (period) onCsv(period);
   }
@@ -65,7 +68,7 @@ export function AddData({
         <Button size={size} variant="outline" onClick={() => fileRef.current?.click()}>
           <FileUp /> Загрузить CSV
         </Button>
-        <Button size={size} variant="ghost" onClick={downloadTemplate}>
+        <Button size={size} variant="ghost" onClick={() => downloadTemplate(tariffs)}>
           <Download /> Шаблон CSV
         </Button>
       </div>
