@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { localAnalysis } from "@/lib/analysis";
 import { BASE_PATH } from "@/lib/config";
 import { accessToken } from "@/lib/supabase";
+import type { Baseline } from "@/lib/funnel";
 import type { Period } from "@/lib/period";
 import type { Product } from "@/lib/products";
 import { cn } from "@/lib/utils";
@@ -22,11 +23,13 @@ const ANALYZE_PROMPT = "Проанализируй текущую воронку
 export function ChatPanel({
   period,
   product,
+  baseline,
   context,
   className,
 }: {
   period: Period;
   product: Product;
+  baseline: Baseline;
   context: string;
   className?: string;
 }) {
@@ -61,7 +64,7 @@ export function ChatPanel({
       if (res.status === 401) {
         write(
           content === ANALYZE_PROMPT
-            ? `${localAnalysis(period, product)}\n\n_Войдите в KaizenHub, чтобы анализ делал Claude._`
+            ? `${localAnalysis(period, product, baseline)}\n\n_Войдите в KaizenHub, чтобы анализ делал Claude._`
             : "Чтобы задавать вопросы Claude, войдите в KaizenHub.",
         );
         return;
@@ -70,7 +73,7 @@ export function ChatPanel({
         setDemo(true);
         write(
           content === ANALYZE_PROMPT
-            ? localAnalysis(period, product)
+            ? localAnalysis(period, product, baseline)
             : "В демо-режиме доступен только автоматический анализ воронки. Добавьте ANTHROPIC_API_KEY в .env.local, чтобы задавать вопросы Claude.",
         );
         return;

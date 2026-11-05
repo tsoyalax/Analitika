@@ -1,19 +1,26 @@
 import {
   analyzeFunnel,
   BOTTLENECK_THRESHOLD,
-  extraPaymentsAtBenchmark,
+  extraPaymentsAtBaseline,
   fmtInt,
   fmtPct,
   fmtRub,
   worstStage,
+  type Baseline,
   type StageResult,
 } from "./funnel";
 import type { Period } from "./period";
 import { economics, type Product } from "./products";
 
 /** Текстовый срез воронки — контекст для AI-ассистента. */
-export function funnelContext(period: Period, rnp: string, product: Product): string {
-  const stages = analyzeFunnel(period.values);
+export function funnelContext(
+  period: Period,
+  rnp: string,
+  product: Product,
+  baseline: Baseline = {},
+  baselineCount = 0,
+): string {
+  const stages = analyzeFunnel(period.values, baseline);
   const eco = economics(period.sales, product, period.values.paid);
   const lines = stages.map((s) => {
     const cr = s.missing
@@ -23,8 +30,10 @@ export function funnelContext(period: Period, rnp: string, product: Product): st
         : s.cr === null
           ? "—"
           : s.gap
-            ? `CR ${fmtPct(s.cr)} от последнего заполненного этапа (предыдущий шаг не заполнен, с эталоном не сравниваем)`
-            : `CR ${fmtPct(s.cr)} (эталон ${fmtPct(s.benchmark ?? 0)}, отклонение ${fmtPct(s.deviation ?? 0)})`;
+            ? `CR ${fmtPct(s.cr)} от последнего заполненного этапа (предыдущий шаг не заполнен, не сравниваем)`
+            : s.baseline === null
+              ? `CR ${fmtPct(s.cr)}`
+              : `CR ${fmtPct(s.cr)} (обычно ${fmtPct(s.baseline)}, отклонение ${fmtPct(s.deviation ?? 0)})`;
     return `- ${s.label}: ${fmtInt(s.value)} · ${cr} · статус: ${s.status}`;
   });
 
@@ -40,7 +49,9 @@ export function funnelContext(period: Period, rnp: string, product: Product): st
     `Тарифы: ${eco.mix.map((t) => `${t.name} — ${fmtRub(t.price)}`).join("; ")}.`,
     "",
     `Период: ${period.label}${period.dates ? ` (${period.dates})` : ""}.`,
-    `Порог узкого места: конверсия хуже эталона более чем на ${fmtPct(BOTTLENECK_THRESHOLD, 0)}.`,
+    baselineCount
+      ? `«Обычно» — медиана конверсии этого шага по ${baselineCount} другим периодам. Узкое место — хуже обычного более чем на ${fmtPct(BOTTLENECK_THRESHOLD, 0)}.`
+      : "Других периодов нет — сравнивать не с чем, никаких эталонов не используем; оценивай шаги по их относительным потерям и фактам из РНП.",
     "Воронка (конверсия — от предыдущего этапа):",
     ...lines,
     ...extra.map((e) => `- ${e}`),
@@ -105,22 +116,25 @@ const SOLUTIONS: Partial<Record<StageResult["id"], { quick: string; content: str
 };
 
 /** Анализ без AI — когда ключ API не задан. Тот же формат, что у модели. */
-export function localAnalysis(period: Period, product: Product): string {
-  const stages = analyzeFunnel(period.values);
+export function localAnalysis(period: Period, product: Product, baseline: Baseline = {}): string {
+  const stages = analyzeFunnel(period.values, baseline);
   const worst = worstStage(stages);
   if (!worst || (worst.deviation ?? 0) >= 0) {
-    return "🔍 **Диагностика:** все этапы на уровне эталона или выше.\n\n💡 **Гипотеза:** воронка сбалансирована — рост даст масштабирование охватов.\n\n🛠️ **Альтернативные решения:**\n1. **Быстрое:** увеличить частоту Reels.\n2. **Контентное:** повторить форматы, которые дали лучшие охваты.\n3. **Техническое:** настроить сквозную аналитику по каждому ролику.";
+    if (!Object.keys(baseline).length) {
+      return "🔍 **Диагностика:** сравнивать пока не с чем — узкие места ищутся по отклонению от вашей обычной конверсии (медианы других периодов). Добавьте ещё хотя бы один период.";
+    }
+    return "🔍 **Диагностика:** все этапы на уровне вашей обычной конверсии или выше.\n\n💡 **Гипотеза:** воронка сбалансирована — рост даст масштабирование охватов.\n\n🛠️ **Альтернативные решения:**\n1. **Быстрое:** увеличить частоту Reels.\n2. **Контентное:** повторить форматы, которые дали лучшие охваты.\n3. **Техническое:** настроить сквозную аналитику по каждому ролику.";
   }
   const eco = economics(period.sales, product, period.values.paid);
-  const extra = extraPaymentsAtBenchmark(stages, worst);
+  const extra = extraPaymentsAtBaseline(stages, worst);
   const s = SOLUTIONS[worst.id];
   const prev = stages[stages.findIndex((x) => x.id === worst.id) - 1];
   return [
-    `🔍 **Диагностика:** сильнее всего просел этап «${worst.label}»: ${fmtPct(worst.cr ?? 0)} из «${prev.label}» при эталоне ${fmtPct(worst.benchmark ?? 0)} (${fmtPct(worst.deviation ?? 0)}).`,
+    `🔍 **Диагностика:** сильнее всего просел этап «${worst.label}»: ${fmtPct(worst.cr ?? 0)} из «${prev.label}» при обычных у вас ${fmtPct(worst.baseline ?? 0)} (${fmtPct(worst.deviation ?? 0)}).`,
     extra === null
       ? "Ниже по воронке есть этап, куда люди приходят в обход этого шага, поэтому потери в оплатах точно не посчитать. Проверьте, что клик по этому шагу правильно считается в аналитике."
       : extra > 0
-        ? `Если вывести этап на эталон, это примерно +${extra.toFixed(1)} оплат${eco.avgCheck ? ` ≈ ${fmtRub(extra * eco.avgCheck)} при среднем чеке ${fmtRub(eco.avgCheck)}` : ""}.`
+        ? `Если вернуть этап к обычной конверсии, это примерно +${extra.toFixed(1)} оплат${eco.avgCheck ? ` ≈ ${fmtRub(extra * eco.avgCheck)} при среднем чеке ${fmtRub(eco.avgCheck)}` : ""}.`
         : "",
     "",
     "💡 **Гипотеза:** люди доходят до этого шага, но не видят достаточной причины сделать следующее действие — либо мешает трение (лишний шаг, неудобный интерфейс), либо не хватает доверия/аргумента в этот момент.",
