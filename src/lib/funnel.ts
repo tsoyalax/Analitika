@@ -1,12 +1,14 @@
 // Модель Reels-воронки: этапы, конверсии и поиск узких мест сравнением с вашими же прошлыми периодами.
 
-export type MacroId = "reach" | "entry" | "warmup" | "payment";
+export type MacroId = "reach" | "entry" | "warmup" | "kep" | "payment" | "full";
 
 export const MACRO_STAGES: { id: MacroId; label: string; hint: string }[] = [
   { id: "reach", label: "Охваты Reels", hint: "просмотры роликов" },
   { id: "entry", label: "Запуск бота / Директ", hint: "написали кодовое слово и пришли в бота" },
-  { id: "warmup", label: "КЭП / Вебинар / Диалог", hint: "статья-подарок, прогрев, переход на сайт" },
+  { id: "warmup", label: "Статья и сайт", hint: "подарок, статья, переход на сайт продаж" },
+  { id: "kep", label: "КЭП (диагностика)", hint: "провели диагностику" },
   { id: "payment", label: "Оплаты", hint: "тариф, форма оплаты, покупка" },
+  { id: "full", label: "Полная оплата", hint: "оплатили полностью" },
 ];
 
 export type StageId =
@@ -19,13 +21,20 @@ export type StageId =
   | "site"
   | "tariff"
   | "checkout"
-  | "paid";
+  | "kep"
+  | "paid"
+  | "fullpaid";
 
 export interface StageDef {
   id: StageId;
   label: string;
   hint: string;
   macro: MacroId;
+  /**
+   * Не все проходят этот шаг (например, КЭП): если он пуст, следующий шаг считаем от
+   * предыдущего заполненного и сравниваем как обычно.
+   */
+  optional?: boolean;
 }
 
 export const STAGES: StageDef[] = [
@@ -38,7 +47,9 @@ export const STAGES: StageDef[] = [
   { id: "site", label: "Перешли на сайт продаж", hint: "уникальные люди", macro: "warmup" },
   { id: "tariff", label: "Нажали кнопку тарифа", hint: "открылось окно перед оплатой", macro: "payment" },
   { id: "checkout", label: "Открыли оплату или оставили заявку", hint: "формы на сайте", macro: "payment" },
+  { id: "kep", label: "КЭП (диагностика)", hint: "провели диагностику", macro: "kep", optional: true },
   { id: "paid", label: "Купили", hint: "из пришедших в этом периоде", macro: "payment" },
+  { id: "fullpaid", label: "Полная оплата", hint: "оплатили полную стоимость", macro: "full" },
 ];
 
 /** Отклонение хуже вашей обычной конверсии, после которого этап считается узким местом. */
@@ -97,7 +108,7 @@ export function analyzeFunnel(values: StageValues, baseline: Baseline = {}): Sta
     const missing = i > 0 && value === 0;
     const prev = i === 0 ? null : lastKnown;
     // Предыдущий шаг пропущен: конверсию через несколько шагов с обычной конверсией одного шага не сравниваем.
-    const gap = i > 1 && (values[STAGES[i - 1].id] ?? 0) === 0;
+    const gap = i > 1 && (values[STAGES[i - 1].id] ?? 0) === 0 && !STAGES[i - 1].optional;
     if (!missing) lastKnown = value;
     const external = !missing && prev !== null && value > prev;
     const cr = prev && !external && !missing ? value / prev : null;
@@ -162,8 +173,9 @@ export function macroSummary(stages: StageResult[]): MacroResult[] {
 export function extraPaymentsAtBaseline(stages: StageResult[], stage: StageResult): number | null {
   if (stage.cr === null || !stage.baseline || stage.cr >= stage.baseline) return 0;
   const idx = stages.findIndex((s) => s.id === stage.id);
-  if (stages.slice(idx + 1).some((s) => s.external)) return null;
-  const paid = stages[stages.length - 1].value;
+  const paidIdx = stages.findIndex((s) => s.id === "paid");
+  if (idx > paidIdx || stages.slice(idx + 1, paidIdx + 1).some((s) => s.external)) return null;
+  const paid = stages[paidIdx].value;
   return paid * (stage.baseline / stage.cr) - paid;
 }
 
