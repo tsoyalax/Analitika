@@ -1,13 +1,15 @@
 {
   "expo": {
-    "name": "oneday",
+    "name": "OneDay",
     "slug": "oneday",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "kz.icon.oneday",
+      "appleTeamId": "A53FP68653"
     },
     "android": {
       "adaptiveIcon": {
@@ -16,7 +18,8 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "kz.icon.oneday"
     },
     "web": {
       "favicon": "./assets/favicon.png"
