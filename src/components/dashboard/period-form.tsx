@@ -7,7 +7,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { Textarea } from "@/components/ui/textarea";
 import { fmtInt, fmtPct, STAGES, type StageId } from "@/lib/funnel";
 import { draftPeriod, type Period } from "@/lib/period";
-import { TARIFFS, type TariffId } from "@/lib/products";
+import type { Tariff } from "@/lib/products";
 
 type ExtraKey = keyof Period["extra"];
 
@@ -78,6 +78,7 @@ export function PeriodForm({
   period,
   isNew,
   notice,
+  tariffs,
   onSubmit,
 }: {
   open: boolean;
@@ -87,6 +88,7 @@ export function PeriodForm({
   isNew: boolean;
   /** Пояснение над формой — что распознано и что проверить. */
   notice?: string;
+  tariffs: Tariff[];
   onSubmit: (p: Period) => Promise<void>;
 }) {
   return (
@@ -105,7 +107,7 @@ export function PeriodForm({
           </div>
         )}
         {/* key сбрасывает поля при открытии другого периода */}
-        {open && <FormBody key={period?.id ?? "new"} period={period} isNew={isNew} onSubmit={onSubmit} />}
+        {open && <FormBody key={period?.id ?? "new"} period={period} isNew={isNew} tariffs={tariffs} onSubmit={onSubmit} />}
       </SheetContent>
     </Sheet>
   );
@@ -114,10 +116,12 @@ export function PeriodForm({
 function FormBody({
   period,
   isNew,
+  tariffs,
   onSubmit,
 }: {
   period: Period | null;
   isNew: boolean;
+  tariffs: Tariff[];
   onSubmit: (p: Period) => Promise<void>;
 }) {
   const [label, setLabel] = useState(period?.label ?? "");
@@ -125,8 +129,8 @@ function FormBody({
   const [values, setValues] = useState<Record<StageId, string>>(
     stageInputs(period?.values),
   );
-  const [sales, setSales] = useState<Record<TariffId, string>>(
-    Object.fromEntries(TARIFFS.map((t) => [t.id, str(period?.sales[t.id])])) as Record<TariffId, string>,
+  const [sales, setSales] = useState<Record<string, string>>(
+    Object.fromEntries(tariffs.map((t) => [t.id, str(period?.sales[t.id])])),
   );
   const [extra, setExtra] = useState<Record<ExtraKey, string>>(
     Object.fromEntries(EXTRAS.map((e) => [e.key, str(period?.extra[e.key], e.pct)])) as Record<ExtraKey, string>,
@@ -146,7 +150,7 @@ function FormBody({
     if (Object.values(stageValues).filter(Boolean).length < 3) return setError("Заполните хотя бы 3 этапа воронки.");
 
     const salesMix = Object.fromEntries(
-      TARIFFS.map((t) => [t.id, num(sales[t.id])]).filter(([, v]) => v !== undefined),
+      tariffs.map((t) => [t.id, num(sales[t.id] ?? "")]).filter(([, v]) => v !== undefined),
     ) as Period["sales"];
     const extras = Object.fromEntries(
       EXTRAS.map((x) => {
@@ -164,7 +168,11 @@ function FormBody({
         label: label.trim().slice(0, 60),
         dates: dates.trim().slice(0, 60),
         values: stageValues,
-        sales: salesMix,
+        // Продажи тарифов, которых сейчас нет в списке, не трогаем — вдруг тариф вернут.
+        sales: {
+          ...Object.fromEntries(Object.entries(base.sales).filter(([id]) => !tariffs.some((t) => t.id === id))),
+          ...salesMix,
+        },
         extra: extras,
         rnp,
       });
@@ -231,7 +239,7 @@ function FormBody({
 
       <fieldset className="space-y-2">
         <legend className="mb-2 text-sm font-medium">Продажи по тарифам, шт.</legend>
-        {TARIFFS.map((t) => (
+        {tariffs.map((t) => (
           <label key={t.id} className="grid grid-cols-[1fr_7rem] items-center gap-3">
             <span className="text-sm">
               {t.name} <span className="text-muted-foreground">· {t.price.toLocaleString("ru-RU")} ₽</span>
@@ -239,7 +247,7 @@ function FormBody({
             <input
               className={input}
               inputMode="numeric"
-              value={sales[t.id]}
+              value={sales[t.id] ?? ""}
               onChange={(e) => setSales((v) => ({ ...v, [t.id]: e.target.value }))}
             />
           </label>

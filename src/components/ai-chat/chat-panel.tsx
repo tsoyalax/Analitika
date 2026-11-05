@@ -8,6 +8,7 @@ import { localAnalysis } from "@/lib/analysis";
 import { BASE_PATH } from "@/lib/config";
 import { accessToken } from "@/lib/supabase";
 import type { Period } from "@/lib/period";
+import type { Product } from "@/lib/products";
 import { cn } from "@/lib/utils";
 import { Markdown } from "./markdown";
 
@@ -18,7 +19,17 @@ interface ChatMessage {
 
 const ANALYZE_PROMPT = "Проанализируй текущую воронку и РНП.";
 
-export function ChatPanel({ period, context, className }: { period: Period; context: string; className?: string }) {
+export function ChatPanel({
+  period,
+  product,
+  context,
+  className,
+}: {
+  period: Period;
+  product: Product;
+  context: string;
+  className?: string;
+}) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -50,7 +61,7 @@ export function ChatPanel({ period, context, className }: { period: Period; cont
       if (res.status === 401) {
         write(
           content === ANALYZE_PROMPT
-            ? `${localAnalysis(period)}\n\n_Войдите в KaizenHub, чтобы анализ делал Claude._`
+            ? `${localAnalysis(period, product)}\n\n_Войдите в KaizenHub, чтобы анализ делал Claude._`
             : "Чтобы задавать вопросы Claude, войдите в KaizenHub.",
         );
         return;
@@ -59,7 +70,7 @@ export function ChatPanel({ period, context, className }: { period: Period; cont
         setDemo(true);
         write(
           content === ANALYZE_PROMPT
-            ? localAnalysis(period)
+            ? localAnalysis(period, product)
             : "В демо-режиме доступен только автоматический анализ воронки. Добавьте ANTHROPIC_API_KEY в .env.local, чтобы задавать вопросы Claude.",
         );
         return;

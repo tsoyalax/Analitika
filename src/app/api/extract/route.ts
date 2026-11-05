@@ -28,14 +28,14 @@ const Extracted = z.object({
     checkout: n(),
     paid: n(),
   }),
-  sales: z.object({ solo: n(), support: n(), turnkey: n() }),
+  sales: z.array(z.object({ tariff: z.string(), count: z.number() })),
   extra: z.object({ automationCr: n(), articleReaders: n(), articleViews: n(), totalPayments: n() }),
   notes: z.string(),
 });
 
 export type ExtractResult = z.infer<typeof Extracted>;
 
-const PROMPT = `На скриншотах — статистика Reels-воронки инфопродукта «Цифровой актив»: Instagram, директ-автоматизация, Telegram-бот со статьёй, сайт продаж, оплаты. Перепиши с них числа в поля ответа. Ничего не вычисляй и не додумывай: если числа для поля нет на скриншотах — пиши -1.
+const prompt = (tariffs: { name: string; price: number }[]) => `На скриншотах — статистика Reels-воронки инфопродукта: Instagram, директ-автоматизация, Telegram-бот со статьёй, сайт продаж, оплаты. Перепиши с них числа в поля ответа. Ничего не вычисляй и не додумывай: если числа для поля нет на скриншотах — пиши -1.
 
 Соответствие полей:
 - values.reach — охват/просмотры Reels (Instagram: «Охват», «Просмотры», «Accounts reached»).
@@ -48,7 +48,7 @@ const PROMPT = `На скриншотах — статистика Reels-вор�
 - values.tariff — «Нажали кнопку тарифа».
 - values.checkout — «Открыли оплату или оставили заявку».
 - values.paid — «Купили» (из пришедших в этом периоде).
-- sales.solo / sales.support / sales.turnkey — сколько продано тарифов «Самостоятельно» (25 000 ₽), «С поддержкой Романа» (80 000 ₽), «Под ключ» (290 000 ₽).
+- sales — сколько продано каждого тарифа, только если это видно на скриншотах; tariff — название ровно из списка: ${tariffs.map((t) => `«${t.name}» (${t.price} ₽)`).join(", ") || "тарифов нет"}. Чего не видно — не включай.
 - extra.automationCr — «Конверсия» директ-автоматизации, долей от 1 (48,26% → 0.4826).
 - extra.articleReaders / extra.articleViews — «Всего читателей статей» и число просмотров рядом.
 - extra.totalPayments — всего оплат за период (включая пришедших раньше).
@@ -59,6 +59,7 @@ const PROMPT = `На скриншотах — статистика Reels-вор�
 
 interface Body {
   images: { mediaType: string; data: string }[];
+  tariffs?: { name: string; price: number }[];
 }
 
 export async function POST(req: Request) {
@@ -67,7 +68,7 @@ export async function POST(req: Request) {
     return Response.json({ error: "no_key", message: "Распознавание недоступно: не задан ANTHROPIC_API_KEY." }, { status: 503 });
   }
 
-  const { images } = (await req.json()) as Body;
+  const { images, tariffs = [] } = (await req.json()) as Body;
   const valid = (images ?? []).filter((i) => MEDIA_TYPES.includes(i.mediaType as (typeof MEDIA_TYPES)[number]) && i.data);
   if (!valid.length || valid.length > MAX_IMAGES) {
     return Response.json({ error: "bad_request", message: `Загрузите от 1 до ${MAX_IMAGES} изображений.` }, { status: 400 });
@@ -93,7 +94,7 @@ export async function POST(req: Request) {
                 data: i.data,
               },
             })),
-            { type: "text" as const, text: PROMPT },
+            { type: "text" as const, text: prompt(tariffs.slice(0, 20)) },
           ],
         },
       ],

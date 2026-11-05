@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { STAGES, type StageValues } from "./funnel";
 import type { Period } from "./period";
+import type { Product } from "./products";
 
 // Таблица public.funnel_periods (миграция в репозитории kaizenhub).
 interface Row {
@@ -63,5 +64,20 @@ export async function updateRnp(sb: SupabaseClient, id: string, rnp: string): Pr
 
 export async function deletePeriod(sb: SupabaseClient, id: string): Promise<void> {
   const { error } = await sb.from("funnel_periods").delete().eq("id", id);
+  if (error) throw error;
+}
+
+// Настройки продукта — таблица public.funnel_settings (одна строка на человека).
+export async function loadProduct(sb: SupabaseClient): Promise<Product | null> {
+  const { data, error } = await sb.from("funnel_settings").select("product").maybeSingle();
+  if (error) throw error;
+  const p = data?.product as Product | undefined;
+  return p?.tariffs ? p : null;
+}
+
+export async function saveProduct(sb: SupabaseClient, product: Product): Promise<void> {
+  const { data: auth } = await sb.auth.getUser();
+  if (!auth.user) throw new Error("Войдите в KaizenHub");
+  const { error } = await sb.from("funnel_settings").upsert({ user_id: auth.user.id, product }, { onConflict: "user_id" });
   if (error) throw error;
 }

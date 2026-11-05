@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { BarChart3, Cloud, Loader2, LogIn, Moon, Pencil, Sun, Trash2 } from "lucide-react";
+import { BarChart3, Cloud, Loader2, LogIn, Moon, Pencil, Sun, Tag, Trash2 } from "lucide-react";
 import { ChatPanel } from "@/components/ai-chat/chat-panel";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -9,8 +9,16 @@ import { funnelContext } from "@/lib/analysis";
 import { KAIZENHUB_URL } from "@/lib/config";
 import { analyzeFunnel, bottlenecks, macroSummary } from "@/lib/funnel";
 import type { Period } from "@/lib/period";
-import { deletePeriod, insertPeriod, loadPeriods, updatePeriod, updateRnp } from "@/lib/periods-store";
-import { economics } from "@/lib/products";
+import {
+  deletePeriod,
+  insertPeriod,
+  loadPeriods,
+  loadProduct,
+  saveProduct,
+  updatePeriod,
+  updateRnp,
+} from "@/lib/periods-store";
+import { DEFAULT_PRODUCT, economics, type Product } from "@/lib/products";
 import { periodFromScreenshots } from "@/lib/screenshots";
 import { getSupabase } from "@/lib/supabase";
 import { AddData } from "./add-data";
@@ -21,6 +29,9 @@ import { EconomicsCard } from "./economics-card";
 import { FunnelSteps } from "./funnel-steps";
 import { KpiCards } from "./kpi-cards";
 import { PeriodForm } from "./period-form";
+import { ProductSheet } from "./product-sheet";
+
+const PRODUCT_KEY = "funnel-product";
 
 type SaveState = "idle" | "saving" | "saved" | "error";
 
@@ -38,6 +49,8 @@ export function Dashboard() {
     period: null,
     isNew: true,
   });
+  const [product, setProduct] = useState<Product>(DEFAULT_PRODUCT);
+  const [productOpen, setProductOpen] = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   const period = periods.find((p) => p.id === periodId) ?? periods[periods.length - 1] ?? null;
@@ -50,9 +63,12 @@ export function Dashboard() {
       setEmail(userEmail);
       if (!userEmail) {
         setPeriods((prev) => prev.filter((p) => !p.saved));
+        setProduct(localProduct() ?? DEFAULT_PRODUCT);
         setReady(true);
         return;
       }
+      // Таблицы настроек может ещё не быть — тогда остаются тарифы по умолчанию.
+      loadProduct(sb).then((p) => p && setProduct(p), () => {});
       try {
         const saved = await loadPeriods(sb);
         setPeriods((prev) => [...saved, ...prev.filter((p) => !p.saved)]);
@@ -88,8 +104,25 @@ export function Dashboard() {
 
   async function handleScreenshots(files: File[]) {
     if (sb && !email) throw new Error("Войдите в KaizenHub, чтобы распознавать скриншоты.");
-    const { period: draft, notes } = await periodFromScreenshots(files);
+    const { period: draft, notes } = await periodFromScreenshots(files, product.tariffs);
     setForm({ open: true, period: draft, isNew: true, notice: notes });
+  }
+
+  /** Продукт и тарифы: в аккаунт, если человек вошёл, иначе в этом браузере. */
+  async function handleSaveProduct(p: Product) {
+    if (sb && email) {
+      try {
+        await saveProduct(sb, p);
+      } catch {
+        throw new Error("Не удалось сохранить тарифы в базу. Попробуйте ещё раз.");
+      }
+    } else {
+      try {
+        localStorage.setItem(PRODUCT_KEY, JSON.stringify(p));
+      } catch {}
+    }
+    setProduct(p);
+    setProductOpen(false);
   }
 
   async function handleCsv(p: Period) {
@@ -177,6 +210,9 @@ export function Dashboard() {
               </Button>
             </>
           )}
+          <Button variant="ghost" size="sm" onClick={() => setProductOpen(true)} title="Продукт и тарифы">
+            <Tag /> Тарифы
+          </Button>
           <Button variant="ghost" size="icon-sm" onClick={toggleTheme} aria-label="Сменить тему">
             <Sun className="hidden dark:block" />
             <Moon className="dark:hidden" />
@@ -206,13 +242,23 @@ export function Dashboard() {
       {!ready ? (
         <Loader2 className="mx-auto mt-24 size-6 animate-spin text-muted-foreground" />
       ) : !period ? (
-        <EmptyState onManual={openNew} onCsv={handleCsv} onScreenshots={handleScreenshots} canSave={canSave} />
+        <EmptyState
+          onManual={openNew}
+          onCsv={handleCsv}
+          onScreenshots={handleScreenshots}
+          tariffs={product.tariffs}
+          canSave={canSave}
+        />
       ) : (
         <PeriodView
           key={period.id}
           period={period}
+          product={product}
+          onEditProduct={() => setProductOpen(true)}
           onRnpChange={handleRnpChange}
-          addData={<AddData onManual={openNew} onCsv={handleCsv} onScreenshots={handleScreenshots} />}
+          addData={
+            <AddData onManual={openNew} onCsv={handleCsv} onScreenshots={handleScreenshots} tariffs={product.tariffs} />
+          }
         />
       )}
 
@@ -222,21 +268,34 @@ export function Dashboard() {
         period={form.period}
         isNew={form.isNew}
         notice={form.notice}
+        tariffs={product.tariffs}
         onSubmit={savePeriod}
       />
+      <ProductSheet open={productOpen} onOpenChange={setProductOpen} product={product} onSave={handleSaveProduct} />
     </div>
   );
+}
+
+function localProduct(): Product | null {
+  try {
+    const p = JSON.parse(localStorage.getItem(PRODUCT_KEY) ?? "null") as Product | null;
+    return p?.tariffs ? p : null;
+  } catch {
+    return null;
+  }
 }
 
 function EmptyState({
   onManual,
   onCsv,
   onScreenshots,
+  tariffs,
   canSave,
 }: {
   onManual: () => void;
   onCsv: (p: Period) => void;
   onScreenshots: (files: File[]) => Promise<void>;
+  tariffs: Product["tariffs"];
   canSave: boolean;
 }) {
   return (
@@ -249,7 +308,7 @@ function EmptyState({
         {canSave && " Периоды сохраняются в ваш аккаунт KaizenHub."}
       </p>
       <div className="mt-6 flex justify-center">
-        <AddData onManual={onManual} onCsv={onCsv} onScreenshots={onScreenshots} size="default" />
+        <AddData onManual={onManual} onCsv={onCsv} onScreenshots={onScreenshots} tariffs={tariffs} size="default" />
       </div>
     </div>
   );
@@ -257,18 +316,22 @@ function EmptyState({
 
 function PeriodView({
   period,
+  product,
+  onEditProduct,
   onRnpChange,
   addData,
 }: {
   period: Period;
+  product: Product;
+  onEditProduct: () => void;
   onRnpChange: (v: string) => void;
   addData: React.ReactNode;
 }) {
   const stages = useMemo(() => analyzeFunnel(period.values), [period]);
   const macros = useMemo(() => macroSummary(stages), [stages]);
   const issues = useMemo(() => bottlenecks(stages), [stages]);
-  const eco = useMemo(() => economics(period.sales), [period]);
-  const context = useMemo(() => funnelContext(period, period.rnp), [period]);
+  const eco = useMemo(() => economics(period.sales, product.tariffs), [period, product]);
+  const context = useMemo(() => funnelContext(period, period.rnp, product), [period, product]);
 
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
@@ -279,7 +342,7 @@ function PeriodView({
           <FunnelSteps stages={stages} extra={period.extra} />
           <div className="space-y-4">
             <BenchmarkChart stages={stages} />
-            <EconomicsCard eco={eco} values={period.values} />
+            <EconomicsCard eco={eco} values={period.values} product={product} onEditProduct={onEditProduct} />
           </div>
         </div>
         <DataInput rnp={period.rnp} onRnpChange={onRnpChange} />
@@ -289,7 +352,7 @@ function PeriodView({
         </div>
       </main>
       <aside className="lg:sticky lg:top-6 lg:h-[calc(100vh-3rem)]">
-        <ChatPanel period={period} context={context} className="h-[600px] lg:h-full" />
+        <ChatPanel period={period} product={product} context={context} className="h-[600px] lg:h-full" />
       </aside>
     </div>
   );

@@ -1,7 +1,19 @@
 import { fmtRub, type StageValues } from "@/lib/funnel";
-import { PRODUCT, type Economics } from "@/lib/products";
+import { Pencil } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import type { Economics, Product } from "@/lib/products";
 
-export function EconomicsCard({ eco, values }: { eco: Economics; values: StageValues }) {
+export function EconomicsCard({
+  eco,
+  values,
+  product,
+  onEditProduct,
+}: {
+  eco: Economics;
+  values: StageValues;
+  product: Product;
+  onEditProduct: () => void;
+}) {
   const rub = (n: number | null) => (eco.sales && n !== null ? fmtRub(n) : "—");
   const metrics = [
     { label: "Выручка", value: rub(eco.revenue) },
@@ -13,9 +25,21 @@ export function EconomicsCard({ eco, values }: { eco: Economics; values: StageVa
     <div className="rounded-xl border bg-card p-4">
       <div className="flex items-baseline justify-between gap-2">
         <div className="text-sm font-medium">Деньги</div>
-        <a href={PRODUCT.url} target="_blank" rel="noreferrer" className="text-xs text-muted-foreground hover:underline">
-          цены: {PRODUCT.url.replace("https://", "")}
-        </a>
+        <div className="flex min-w-0 items-center gap-1">
+          {product.url && (
+            <a
+              href={product.url}
+              target="_blank"
+              rel="noreferrer"
+              className="truncate text-xs text-muted-foreground hover:underline"
+            >
+              цены: {product.url.replace(/^https?:\/\//, "").replace(/\/$/, "")}
+            </a>
+          )}
+          <Button variant="ghost" size="icon-xs" onClick={onEditProduct} aria-label="Продукт и тарифы">
+            <Pencil />
+          </Button>
+        </div>
       </div>
       <div className="mt-3 grid grid-cols-2 gap-3">
         {metrics.map((m) => (
