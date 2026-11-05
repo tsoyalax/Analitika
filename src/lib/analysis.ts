@@ -51,9 +51,10 @@ export function funnelContext(
     `Тарифы: ${eco.mix.map((t) => `${t.name} — ${fmtRub(t.price)}`).join("; ")}.`,
     "",
     `Период: ${period.label}${period.dates ? ` (${period.dates})` : ""}.`,
-    baselineCount
-      ? `«Обычно» — медиана конверсии этого шага по ${baselineCount} другим периодам. Узкое место — хуже обычного более чем на ${fmtPct(BOTTLENECK_THRESHOLD, 0)}.`
-      : `Других периодов нет, эталонов не используем. Статус шага — по доле отвалившихся на нём людей: больше ${fmtPct(DROP_BAD, 0)} — узкое место (bad), больше ${fmtPct(DROP_WARN, 0)} — ниже нормы (warn). Переход «охваты → директ» не оцениваем: охваты — просмотры, а не люди.`,
+    `Эталонов не используем. Статус шага: на нём отвалилось больше ${fmtPct(DROP_BAD, 0)} людей — узкое место (bad), больше ${fmtPct(DROP_WARN, 0)} — ниже нормы (warn); переход «охваты → директ» не оцениваем (охваты — просмотры, а не люди).` +
+      (baselineCount
+        ? ` Ещё «обычно» — медиана конверсии шага по ${baselineCount} другим периодам; хуже обычного более чем на ${fmtPct(BOTTLENECK_THRESHOLD, 0)} — тоже узкое место.`
+        : ""),
     "Воронка (конверсия — от предыдущего этапа):",
     ...lines,
     ...extra.map((e) => `- ${e}`),
@@ -121,18 +122,15 @@ const SOLUTIONS: Partial<Record<StageResult["id"], { quick: string; content: str
 export function localAnalysis(period: Period, product: Product, baseline: Baseline = {}): string {
   const stages = analyzeFunnel(period.values, baseline);
   const worst = worstStage(stages);
-  const byDropOff = worst !== null && worst.deviation === null;
-  if (!worst || (!byDropOff && (worst.deviation ?? 0) >= 0) || (byDropOff && worst.status === "good")) {
-    return "🔍 **Диагностика:** все этапы на уровне вашей обычной конверсии или выше.\n\n💡 **Гипотеза:** воронка сбалансирована — рост даст масштабирование охватов.\n\n🛠️ **Альтернативные решения:**\n1. **Быстрое:** увеличить частоту Reels.\n2. **Контентное:** повторить форматы, которые дали лучшие охваты.\n3. **Техническое:** настроить сквозную аналитику по каждому ролику.";
+  if (!worst || worst.status === "good") {
+    return "🔍 **Диагностика:** явных провалов нет — ни на одном шаге не теряется больше половины людей.\n\n💡 **Гипотеза:** воронка сбалансирована — рост даст масштабирование охватов.\n\n🛠️ **Альтернативные решения:**\n1. **Быстрое:** увеличить частоту Reels.\n2. **Контентное:** повторить форматы, которые дали лучшие охваты.\n3. **Техническое:** настроить сквозную аналитику по каждому ролику.";
   }
   const eco = economics(period.sales, product, period.values.paid);
   const extra = extraPaymentsAtBaseline(stages, worst);
   const s = SOLUTIONS[worst.id];
-  const prev = stages[stages.findIndex((x) => x.id === worst.id) - 1];
   return [
-    byDropOff
-      ? `🔍 **Диагностика:** сильнее всего теряем людей на шаге «${worst.label}»: дошли ${fmtPct(worst.cr ?? 0)} из «${prev.label}», отвалилось ${fmtPct(1 - (worst.cr ?? 0))}.`
-      : `🔍 **Диагностика:** сильнее всего просел этап «${worst.label}»: ${fmtPct(worst.cr ?? 0)} из «${prev.label}» при обычных у вас ${fmtPct(worst.baseline ?? 0)} (${fmtPct(worst.deviation ?? 0)}).`,
+    `🔍 **Диагностика:** сильнее всего теряем людей на шаге «${worst.label}»: дошли ${fmtInt(worst.value)} из ${fmtInt(worst.prev ?? 0)} (${fmtPct(worst.cr ?? 0)}), отвалилось ${fmtPct(1 - (worst.cr ?? 0))}` +
+      (worst.baseline !== null ? `; обычно у вас ${fmtPct(worst.baseline)}.` : "."),
     extra === null
       ? "Ниже по воронке есть этап, куда люди приходят в обход этого шага, поэтому потери в оплатах точно не посчитать. Проверьте, что клик по этому шагу правильно считается в аналитике."
       : extra > 0

@@ -43,7 +43,7 @@ export function FunnelSteps({
       <div className="border-b px-4 py-3">
         <div className="text-sm font-medium">Путь людей: от Reels до оплаты</div>
         <div className="text-xs text-muted-foreground">
-          Процент — сколько дошло с прошлого шага; «обычно» — медиана ваших других периодов. Пока период один: красный — на шаге отвалилось больше 80% людей, жёлтый — больше 50%. Ширина — в логарифмическом масштабе.
+          Процент — сколько дошло с прошлого шага. Красный — на шаге отвалилось больше 80% людей (или шаг заметно хуже, чем обычно у вас), жёлтый — больше 50%. «Обычно» — медиана ваших других периодов. Ширина — в логарифмическом масштабе.
         </div>
       </div>
       <ul className="px-2 py-3 sm:px-4">
@@ -119,7 +119,6 @@ function noteFor(s: StageResult, extra: Period["extra"]): string | null {
   if (s.gap && s.cr !== null) return "через пропущенные шаги — без сравнения";
   if (s.id === "tariff" && s.cr !== null) return `${fmtPct(s.cr)} от перешедших на сайт = ${fmtInt(s.value)} чел.`;
   if (s.id === "dm" && extra.automationCr !== undefined) return `конверсия автоматизации ${fmtPct(extra.automationCr, 2)}`;
-  if (s.id === "fullpaid" && s.cr !== null) return `конверсия в полную оплату: ${fmtPct(s.cr)}`;
   if (s.id === "paid" && extra.totalPayments !== undefined) return `всего оплат за период: ${fmtInt(extra.totalPayments)}`;
   return null;
 }
@@ -128,7 +127,7 @@ function noteFor(s: StageResult, extra: Period["extra"]): string | null {
 function FunnelResult({ eco }: { eco: Economics }) {
   const approx = eco.estimated ? "≈ " : "";
   const items = [
-    { label: "Купили", value: eco.sales ? fmtInt(eco.sales) : "—" },
+    { label: "Полная оплата", value: eco.sales ? fmtInt(eco.sales) : "—" },
     { label: "Средний чек", value: eco.sales ? `${approx}${fmtRub(eco.avgCheck)}` : "—" },
     { label: "Выручка", value: eco.sales ? `${approx}${fmtRub(eco.revenue)}` : "—" },
   ];

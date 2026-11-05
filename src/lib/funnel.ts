@@ -7,7 +7,7 @@ export const MACRO_STAGES: { id: MacroId; label: string; hint: string }[] = [
   { id: "entry", label: "Запуск бота / Директ", hint: "написали кодовое слово и пришли в бота" },
   { id: "warmup", label: "Статья и сайт", hint: "подарок, статья, переход на сайт продаж" },
   { id: "kep", label: "КЭП (диагностика)", hint: "провели диагностику" },
-  { id: "payment", label: "Оплаты", hint: "тариф, форма оплаты, покупка" },
+  { id: "payment", label: "Тариф и заявка", hint: "кнопка тарифа, форма оплаты или заявка" },
   { id: "full", label: "Полная оплата", hint: "оплатили полностью" },
 ];
 
@@ -22,8 +22,7 @@ export type StageId =
   | "tariff"
   | "checkout"
   | "kep"
-  | "paid"
-  | "fullpaid";
+  | "paid";
 
 export interface StageDef {
   id: StageId;
@@ -48,8 +47,7 @@ export const STAGES: StageDef[] = [
   { id: "tariff", label: "Нажали кнопку тарифа", hint: "открылось окно перед оплатой", macro: "payment" },
   { id: "checkout", label: "Открыли оплату или оставили заявку", hint: "формы на сайте", macro: "payment" },
   { id: "kep", label: "КЭП (диагностика)", hint: "провели диагностику", macro: "kep", optional: true },
-  { id: "paid", label: "Купили", hint: "из пришедших в этом периоде", macro: "payment" },
-  { id: "fullpaid", label: "Полная оплата", hint: "оплатили полную стоимость", macro: "full" },
+  { id: "paid", label: "Полная оплата", hint: "оплатили полностью, из пришедших в этом периоде", macro: "full" },
 ];
 
 /** Отклонение хуже вашей обычной конверсии, после которого этап считается узким местом. */
@@ -57,14 +55,17 @@ export const BOTTLENECK_THRESHOLD = 0.25;
 const WARNING_THRESHOLD = 0.1;
 
 /**
- * Когда сравнивать не с чем (период один): узкое место — шаг, на котором отваливается
- * больше 80% людей, «ниже нормы» — больше 50%. Первый шаг (охваты → директ) не оцениваем:
- * охваты — это просмотры, а не люди.
+ * Узкое место видно и без истории: шаг, на котором отваливается больше 80% людей,
+ * «ниже нормы» — больше 50%. Первый шаг (охваты → директ) не оцениваем: охваты — это
+ * просмотры, а не люди. Если есть другие периоды, шаг ещё и сравнивается с их медианой —
+ * берётся худший из двух статусов.
  */
 export const DROP_BAD = 0.8;
 export const DROP_WARN = 0.5;
 
 export type StageStatus = "good" | "warn" | "bad" | "neutral";
+
+const STATUS_RANK: Record<StageStatus, number> = { neutral: 0, good: 1, warn: 2, bad: 3 };
 
 export interface StageResult extends StageDef {
   value: number;
@@ -110,7 +111,6 @@ export function computeBaseline(others: StageValues[]): Baseline {
 
 export function analyzeFunnel(values: StageValues, baseline: Baseline = {}): StageResult[] {
   const top = values.reach || 1;
-  const hasBaseline = Object.keys(baseline).length > 0;
   let lastKnown: number | null = null;
   return STAGES.map((def, i) => {
     const value = values[def.id] ?? 0;
@@ -123,13 +123,17 @@ export function analyzeFunnel(values: StageValues, baseline: Baseline = {}): Sta
     const cr = prev && !external && !missing ? value / prev : null;
     const base = baseline[def.id] ?? null;
     const deviation = cr !== null && !gap && base ? (cr - base) / base : null;
-    let status: StageStatus = "neutral";
-    if (deviation !== null) {
-      status = deviation < -BOTTLENECK_THRESHOLD ? "bad" : deviation < -WARNING_THRESHOLD ? "warn" : "good";
-    } else if (!hasBaseline && cr !== null && !gap && i > 1) {
-      const loss = 1 - cr;
-      status = loss > DROP_BAD ? "bad" : loss > DROP_WARN ? "warn" : "good";
-    }
+    const byDrop: StageStatus =
+      cr === null || gap || i < 2 ? "neutral" : 1 - cr > DROP_BAD ? "bad" : 1 - cr > DROP_WARN ? "warn" : "good";
+    const byHistory: StageStatus =
+      deviation === null
+        ? "neutral"
+        : deviation < -BOTTLENECK_THRESHOLD
+          ? "bad"
+          : deviation < -WARNING_THRESHOLD
+            ? "warn"
+            : "good";
+    const status = STATUS_RANK[byHistory] > STATUS_RANK[byDrop] ? byHistory : byDrop;
     return { ...def, value, prev, cr, external, missing, gap, baseline: base, deviation, status, share: value / top };
   });
 }
@@ -137,22 +141,22 @@ export function analyzeFunnel(values: StageValues, baseline: Baseline = {}): Sta
 export function bottlenecks(stages: StageResult[]): StageResult[] {
   return stages
     .filter((s) => s.status === "bad")
-    .sort((a, b) => (a.deviation ?? a.cr ?? 0) - (b.deviation ?? b.cr ?? 0));
+    .sort((a, b) => (a.cr ?? 0) - (b.cr ?? 0));
 }
 
-/**
- * Самый слабый шаг: с наибольшим отклонением от обычной конверсии, а если сравнивать
- * не с чем — с наименьшей конверсией среди оценённых шагов (даже если он не красный).
- */
+/** Самый слабый шаг: худший статус, при равном — с наименьшей конверсией. */
 export function worstStage(stages: StageResult[]): StageResult | null {
-  const byDeviation = stages.reduce<StageResult | null>(
-    (worst, s) => (s.deviation !== null && (worst === null || s.deviation < (worst.deviation ?? 0)) ? s : worst),
-    null,
-  );
-  if (byDeviation) return byDeviation;
   return stages
     .filter((s) => s.status !== "neutral" && s.cr !== null)
-    .reduce<StageResult | null>((worst, s) => (worst === null || s.cr! < worst.cr! ? s : worst), null);
+    .reduce<StageResult | null>(
+      (worst, s) =>
+        worst === null ||
+        STATUS_RANK[s.status] > STATUS_RANK[worst.status] ||
+        (s.status === worst.status && s.cr! < worst.cr!)
+          ? s
+          : worst,
+      null,
+    );
 }
 
 export interface MacroResult {
@@ -166,7 +170,6 @@ export interface MacroResult {
   status: StageStatus;
 }
 
-const STATUS_RANK: Record<StageStatus, number> = { neutral: 0, good: 1, warn: 2, bad: 3 };
 
 export function macroSummary(stages: StageResult[]): MacroResult[] {
   let prevValue: number | null = null;
