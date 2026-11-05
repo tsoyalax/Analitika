@@ -17,6 +17,8 @@ export interface Period {
   rnp: string;
   /** Данные пришли из загруженного CSV, а не из мока. */
   uploaded?: boolean;
+  /** Период хранится в Supabase (id — uuid строки). */
+  saved?: boolean;
 }
 
 export const MOCK_PERIODS: Period[] = [

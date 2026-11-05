@@ -12,11 +12,13 @@ export function DataInput({
   onRnpChange,
   current,
   onUpload,
+  hint,
 }: {
   rnp: string;
   onRnpChange: (v: string) => void;
   current: Period;
   onUpload: (p: Period) => void;
+  hint?: string;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [errors, setErrors] = useState<string[]>([]);
@@ -26,7 +28,7 @@ export function DataInput({
     if (file.name.toLowerCase().endsWith(".csv")) {
       const { period, errors } = parseFunnelCsv(text, current);
       setErrors(errors);
-      if (period) onUpload({ ...period, rnp });
+      if (period) onUpload({ ...period, rnp, label: file.name.replace(/\.csv$/i, "").slice(0, 24) || period.label });
     } else {
       setErrors([]);
       onRnpChange(text);
@@ -73,6 +75,7 @@ export function DataInput({
         placeholder="План, факт, что запускали, что сломалось…"
         className="mt-3 min-h-40 text-sm"
       />
+      {hint && <p className="mt-2 text-xs text-muted-foreground">{hint}</p>}
       {errors.length > 0 && (
         <ul className="mt-2 space-y-0.5 text-xs text-red-500">
           {errors.map((e) => (
