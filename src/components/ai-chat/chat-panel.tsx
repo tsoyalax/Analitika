@@ -5,6 +5,8 @@ import { ArrowUp, Loader2, Sparkles, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { localAnalysis } from "@/lib/analysis";
+import { BASE_PATH } from "@/lib/config";
+import { accessToken } from "@/lib/supabase";
 import type { Period } from "@/lib/mock-data";
 import { cn } from "@/lib/utils";
 import { Markdown } from "./markdown";
@@ -39,11 +41,20 @@ export function ChatPanel({ period, context, className }: { period: Period; cont
       setMessages((prev) => [...prev.slice(0, -1), { role: "assistant", content: reply }]);
 
     try {
-      const res = await fetch("/api/analyze", {
+      const token = await accessToken();
+      const res = await fetch(`${BASE_PATH}/api/analyze`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(token && { Authorization: `Bearer ${token}` }) },
         body: JSON.stringify({ messages: history, context }),
       });
+      if (res.status === 401) {
+        write(
+          content === ANALYZE_PROMPT
+            ? `${localAnalysis(period)}\n\n_Войдите в KaizenHub, чтобы анализ делал Claude._`
+            : "Чтобы задавать вопросы Claude, войдите в KaizenHub.",
+        );
+        return;
+      }
       if (res.status === 503) {
         setDemo(true);
         write(
