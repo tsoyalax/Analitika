@@ -1,5 +1,6 @@
-import { fmtInt, fmtPct, type StageResult, type StageStatus } from "@/lib/funnel";
+import { fmtInt, fmtPct, fmtRub, type StageResult, type StageStatus } from "@/lib/funnel";
 import type { Period } from "@/lib/period";
+import type { Economics } from "@/lib/products";
 import { cn } from "@/lib/utils";
 import { STATUS_STYLES } from "./status";
 
@@ -27,7 +28,15 @@ function widths(stages: StageResult[]): number[] {
 }
 
 /** Воронка «Путь людей»: сегмент на каждый шаг, рядом — люди, конверсия из прошлого шага и эталон. */
-export function FunnelSteps({ stages, extra }: { stages: StageResult[]; extra: Period["extra"] }) {
+export function FunnelSteps({
+  stages,
+  extra,
+  eco,
+}: {
+  stages: StageResult[];
+  extra: Period["extra"];
+  eco: Economics;
+}) {
   const w = widths(stages);
   return (
     <div className="rounded-xl border bg-card">
@@ -90,6 +99,7 @@ export function FunnelSteps({ stages, extra }: { stages: StageResult[]; extra: P
           );
         })}
       </ul>
+      <FunnelResult eco={eco} />
       {extra.articleReaders !== undefined && (
         <div className="flex justify-between gap-3 border-t px-4 py-3 text-sm text-muted-foreground">
           <span>Всего читателей статей (бот, соцсети, ссылки)</span>
@@ -110,4 +120,34 @@ function noteFor(s: StageResult, extra: Period["extra"]): string | null {
   if (s.id === "dm" && extra.automationCr !== undefined) return `конверсия автоматизации ${fmtPct(extra.automationCr, 2)}`;
   if (s.id === "paid" && extra.totalPayments !== undefined) return `всего оплат за период: ${fmtInt(extra.totalPayments)}`;
   return null;
+}
+
+/** Итог воронки: сколько купили × средний чек = выручка. */
+function FunnelResult({ eco }: { eco: Economics }) {
+  const approx = eco.estimated ? "≈ " : "";
+  const items = [
+    { label: "Купили", value: eco.sales ? fmtInt(eco.sales) : "—" },
+    { label: "Средний чек", value: eco.sales ? `${approx}${fmtRub(eco.avgCheck)}` : "—" },
+    { label: "Выручка", value: eco.sales ? `${approx}${fmtRub(eco.revenue)}` : "—" },
+  ];
+  return (
+    <div className="mx-2 mb-3 rounded-lg border border-emerald-500/40 bg-emerald-500/5 px-4 py-3 sm:mx-4">
+      <div className="grid grid-cols-3 gap-3 text-center">
+        {items.map((it, i) => (
+          <div key={it.label} className="relative">
+            {i > 0 && (
+              <span className="absolute top-1/2 -left-2.5 -translate-y-1/2 text-muted-foreground">{i === 1 ? "×" : "="}</span>
+            )}
+            <div className="text-xs text-muted-foreground">{it.label}</div>
+            <div className="text-base font-semibold tabular-nums sm:text-lg">{it.value}</div>
+          </div>
+        ))}
+      </div>
+      {eco.estimated && (
+        <p className="mt-2 text-center text-[11px] text-muted-foreground">
+          Оценка по среднему чеку из «Тарифов» — продажи по каждому тарифу не указаны.
+        </p>
+      )}
+    </div>
+  );
 }

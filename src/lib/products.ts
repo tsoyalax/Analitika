@@ -13,6 +13,11 @@ export interface Product {
   url: string;
   description: string;
   tariffs: Tariff[];
+  /**
+   * Средний чек для расчётов, когда в периоде не указано, сколько продано каждого тарифа.
+   * По умолчанию — средняя цена тарифов с сайта; можно поправить вручную.
+   */
+  avgCheck?: number;
 }
 
 export const DEFAULT_PRODUCT: Product = {
@@ -32,19 +37,31 @@ export type SalesMix = Partial<Record<string, number>>;
 
 export interface Economics {
   revenue: number;
+  /** Оплат: по тарифам, а если их нет — из этапа «Купили». */
   sales: number;
   avgCheck: number;
+  /** Продаж по тарифам нет: выручка = оплаты × средний чек из настроек продукта. */
+  estimated: boolean;
   mix: (Tariff & { count: number; revenue: number })[];
 }
 
-export function economics(mix: SalesMix, tariffs: Tariff[]): Economics {
-  const rows = tariffs.map((t) => {
+/** Средняя цена тарифов — подсказка для среднего чека, когда продажи по тарифам неизвестны. */
+export const meanPrice = (tariffs: Tariff[]) =>
+  tariffs.length ? Math.round(tariffs.reduce((s, t) => s + t.price, 0) / tariffs.length) : 0;
+
+/** Средний чек для оценки: заданный вручную или средняя цена тарифов. */
+export const fallbackCheck = (product: Product) => product.avgCheck || meanPrice(product.tariffs);
+
+export function economics(mix: SalesMix, product: Product, paid = 0): Economics {
+  const rows = product.tariffs.map((t) => {
     const count = mix[t.id] ?? 0;
     return { ...t, count, revenue: count * t.price };
   });
   const revenue = rows.reduce((s, r) => s + r.revenue, 0);
   const sales = rows.reduce((s, r) => s + r.count, 0);
-  return { revenue, sales, avgCheck: sales ? revenue / sales : 0, mix: rows };
+  if (sales) return { revenue, sales, avgCheck: revenue / sales, estimated: false, mix: rows };
+  const check = fallbackCheck(product);
+  return { revenue: paid * check, sales: paid, avgCheck: paid ? check : 0, estimated: paid > 0 && check > 0, mix: rows };
 }
 
 const norm = (s: string) => s.trim().toLowerCase().replace(/ё/g, "е");
