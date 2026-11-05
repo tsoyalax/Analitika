@@ -74,11 +74,11 @@ export function FunnelSteps({
                 <div className="relative flex h-full items-center justify-center">
                   <span
                     className={cn(
-                      "rounded px-1.5 text-sm font-semibold tabular-nums",
+                      "rounded px-1.5 text-sm font-semibold whitespace-nowrap tabular-nums",
                       s.missing ? "text-muted-foreground" : "bg-card/70 backdrop-blur-[2px]",
                     )}
                   >
-                    {s.missing ? "—" : fmtInt(s.value)}
+                    {s.missing ? "—" : i === 0 ? fmtInt(s.value) : `${fmtInt(s.value)} чел.`}
                   </span>
                 </div>
               </div>
@@ -117,6 +117,7 @@ function noteFor(s: StageResult, extra: Period["extra"]): string | null {
   if (s.missing) return "нет данных — шаг пропущен";
   if (s.external) return "больше прошлого шага: есть люди из других источников";
   if (s.gap && s.cr !== null) return "через пропущенные шаги — без сравнения с эталоном";
+  if (s.id === "tariff" && s.cr !== null) return `${fmtPct(s.cr)} от перешедших на сайт = ${fmtInt(s.value)} чел.`;
   if (s.id === "dm" && extra.automationCr !== undefined) return `конверсия автоматизации ${fmtPct(extra.automationCr, 2)}`;
   if (s.id === "paid" && extra.totalPayments !== undefined) return `всего оплат за период: ${fmtInt(extra.totalPayments)}`;
   return null;
