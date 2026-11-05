@@ -16,7 +16,9 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Lint
+        run: npm run lint
       - name: Typecheck
-        run: npx tsc --noEmit
-      - name: Bundle iOS JS
-        run: npx expo export --platform ios --output-dir dist
+        run: npm run typecheck
+      - name: Build
+        run: npm run build
