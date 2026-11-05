@@ -5,7 +5,7 @@ import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
-import { STAGES, type StageId } from "@/lib/funnel";
+import { fmtInt, fmtPct, STAGES, type StageId } from "@/lib/funnel";
 import { draftPeriod, type Period } from "@/lib/period";
 import { TARIFFS, type TariffId } from "@/lib/products";
 
@@ -24,6 +24,32 @@ const str = (n: number | undefined, pct = false) =>
 function num(s: string): number | undefined {
   const n = Number(s.replace(/[\s ]/g, "").replace(",", "."));
   return s.trim() && Number.isFinite(n) && n >= 0 ? n : undefined;
+}
+
+/**
+ * Этапы воронки: число людей или процент от предыдущего заполненного шага («5%»).
+ * Процент сразу переводится в людей — в базе хранятся только абсолютные числа.
+ */
+function resolveStages(raw: Record<StageId, string>) {
+  const values = {} as Record<StageId, number>;
+  const hints = {} as Record<StageId, string>;
+  let prev = 0;
+  for (const s of STAGES) {
+    const text = raw[s.id].trim();
+    const isPct = text.endsWith("%");
+    const n = num(text.replace(/%$/, ""));
+    let value = 0;
+    if (n !== undefined && isPct) {
+      value = prev ? Math.round((n / 100) * prev) : 0;
+      hints[s.id] = prev ? `≈ ${fmtInt(value)} чел.` : "нет пред. шага";
+    } else if (n !== undefined) {
+      value = Math.round(n);
+      if (prev && value) hints[s.id] = fmtPct(value / prev);
+    }
+    values[s.id] = value;
+    if (value) prev = value;
+  }
+  return { values, hints };
 }
 
 const input =
@@ -92,10 +118,11 @@ function FormBody({
   const [rnp, setRnp] = useState(period?.rnp ?? "");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const stageHints = resolveStages(values).hints;
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    const stageValues = Object.fromEntries(STAGES.map((s) => [s.id, num(values[s.id]) ?? 0])) as Period["values"];
+    const stageValues = resolveStages(values).values;
     if (!label.trim()) return setError("Укажите название периода, например «Неделя 45».");
     if (Object.values(stageValues).filter(Boolean).length < 3) return setError("Заполните хотя бы 3 этапа воронки.");
 
@@ -143,16 +170,22 @@ function FormBody({
       </div>
 
       <fieldset className="space-y-2">
-        <legend className="mb-2 text-sm font-medium">Воронка, человек</legend>
-        {STAGES.map((s) => (
-          <label key={s.id} className="grid grid-cols-[1fr_7rem] items-center gap-3">
+        <legend className="text-sm font-medium">Воронка, человек</legend>
+        <p className="mb-2 text-xs text-muted-foreground">
+          Можно ввести процент от предыдущего шага, например «5%», — посчитаю людей сам. Справа — конверсия из
+          предыдущего шага.
+        </p>
+        {STAGES.map((s, i) => (
+          <label key={s.id} className="grid grid-cols-[1fr_6.5rem_4.5rem] items-center gap-2">
             <span className="text-sm">{s.label}</span>
             <input
               className={input}
-              inputMode="numeric"
+              inputMode="decimal"
+              placeholder={i === 0 ? "" : s.id === "tariff" ? "52 или 5%" : "или %"}
               value={values[s.id]}
               onChange={(e) => setValues((v) => ({ ...v, [s.id]: e.target.value }))}
             />
+            <span className="text-right text-xs text-muted-foreground tabular-nums">{stageHints[s.id] ?? ""}</span>
           </label>
         ))}
       </fieldset>
