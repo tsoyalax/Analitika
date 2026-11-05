@@ -38,16 +38,16 @@ export async function periodFromScreenshots(files: File[]): Promise<{ period: Pe
   if (!res.ok) throw new Error(data.message ?? `Ошибка ${res.status}`);
 
   const r = data as ExtractResult;
-  const defined = <T extends object>(o: T) =>
-    Object.fromEntries(Object.entries(o).filter(([, v]) => v !== null && v !== undefined && v >= 0));
+  // -1 — «нет на скриншотах».
+  const defined = <T extends object>(o: T) => Object.fromEntries(Object.entries(o).filter(([, v]) => v >= 0));
   const values = Object.fromEntries(
     STAGES.map((s) => [s.id, Math.max(0, Math.round(r.values[s.id] ?? 0))]),
   ) as Period["values"];
 
   return {
     period: draftPeriod({
-      label: r.label ?? "",
-      dates: r.dates ?? "",
+      label: r.label.trim(),
+      dates: r.dates.trim(),
       values,
       sales: defined(r.sales),
       extra: defined(r.extra),

@@ -9,12 +9,13 @@ const MODEL = "claude-opus-5-5";
 const MAX_IMAGES = 6;
 const MEDIA_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"] as const;
 
-const n = () => z.number().nullable();
+// API ограничивает число полей «X или null» (16), поэтому «нет на скриншотах» — это -1 для чисел
+// и пустая строка для текста. Поля совпадают с этапами воронки и тарифами в lib/.
+const n = () => z.number();
 
-// Всё, чего нет на скриншотах, — null. Поля совпадают с этапами воронки и тарифами в lib/.
 const Extracted = z.object({
-  label: z.string().nullable(),
-  dates: z.string().nullable(),
+  label: z.string(),
+  dates: z.string(),
   values: z.object({
     reach: n(),
     dm: n(),
@@ -34,7 +35,7 @@ const Extracted = z.object({
 
 export type ExtractResult = z.infer<typeof Extracted>;
 
-const PROMPT = `На скриншотах — статистика Reels-воронки инфопродукта «Цифровой актив»: Instagram, директ-автоматизация, Telegram-бот со статьёй, сайт продаж, оплаты. Перепиши с них числа в поля ответа. Ничего не вычисляй и не додумывай: если числа для поля нет на скриншотах — null.
+const PROMPT = `На скриншотах — статистика Reels-воронки инфопродукта «Цифровой актив»: Instagram, директ-автоматизация, Telegram-бот со статьёй, сайт продаж, оплаты. Перепиши с них числа в поля ответа. Ничего не вычисляй и не додумывай: если числа для поля нет на скриншотах — пиши -1.
 
 Соответствие полей:
 - values.reach — охват/просмотры Reels (Instagram: «Охват», «Просмотры», «Accounts reached»).
@@ -51,7 +52,7 @@ const PROMPT = `На скриншотах — статистика Reels-вор�
 - extra.automationCr — «Конверсия» директ-автоматизации, долей от 1 (48,26% → 0.4826).
 - extra.articleReaders / extra.articleViews — «Всего читателей статей» и число просмотров рядом.
 - extra.totalPayments — всего оплат за период (включая пришедших раньше).
-- label и dates — название и даты периода, если они видны (иначе null).
+- label и dates — название и даты периода, если они видны (иначе пустая строка).
 
 Проценты рядом с абсолютными числами (например «1 288 77,9%») не переноси — бери только абсолютное число. Числа пиши без пробелов-разделителей.
 В notes коротко по-русски: что распознал, что не нашёл и в чём не уверен.`;
@@ -105,7 +106,10 @@ export async function POST(req: Request) {
     let message = "Не удалось распознать скриншоты.";
     if (error instanceof Anthropic.AuthenticationError) message = "Неверный ANTHROPIC_API_KEY.";
     else if (error instanceof Anthropic.RateLimitError) message = "Превышен лимит запросов к API, попробуйте позже.";
-    else if (error instanceof Anthropic.APIError) message = `Ошибка API ${error.status}: ${error.message}`;
+    else if (error instanceof Anthropic.APIError) {
+      console.error("extract", error.status, error.message);
+      message = `Не удалось распознать скриншоты (ошибка API ${error.status}). Попробуйте ещё раз.`;
+    }
     return Response.json({ error: "api", message }, { status: 502 });
   }
 }
