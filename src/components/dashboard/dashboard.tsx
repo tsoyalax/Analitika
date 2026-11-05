@@ -7,7 +7,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { funnelContext } from "@/lib/analysis";
 import { KAIZENHUB_URL } from "@/lib/config";
-import { analyzeFunnel, bottlenecks, macroSummary } from "@/lib/funnel";
+import { analyzeFunnel, bottlenecks, computeBaseline, macroSummary } from "@/lib/funnel";
 import type { Period } from "@/lib/period";
 import {
   deletePeriod,
@@ -253,6 +253,7 @@ export function Dashboard() {
         <PeriodView
           key={period.id}
           period={period}
+          others={periods.filter((p) => p.id !== period.id)}
           product={product}
           onEditProduct={() => setProductOpen(true)}
           onRnpChange={handleRnpChange}
@@ -316,27 +317,34 @@ function EmptyState({
 
 function PeriodView({
   period,
+  others,
   product,
   onEditProduct,
   onRnpChange,
   addData,
 }: {
   period: Period;
+  /** Остальные периоды: их медиана — «обычная» конверсия, с которой сравнивается этот. */
+  others: Period[];
   product: Product;
   onEditProduct: () => void;
   onRnpChange: (v: string) => void;
   addData: React.ReactNode;
 }) {
-  const stages = useMemo(() => analyzeFunnel(period.values), [period]);
+  const baseline = useMemo(() => computeBaseline(others.map((p) => p.values)), [others]);
+  const stages = useMemo(() => analyzeFunnel(period.values, baseline), [period, baseline]);
   const macros = useMemo(() => macroSummary(stages), [stages]);
   const issues = useMemo(() => bottlenecks(stages), [stages]);
   const eco = useMemo(() => economics(period.sales, product, period.values.paid), [period, product]);
-  const context = useMemo(() => funnelContext(period, period.rnp, product), [period, product]);
+  const context = useMemo(
+    () => funnelContext(period, period.rnp, product, baseline, others.length),
+    [period, product, baseline, others.length],
+  );
 
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
       <main className="min-w-0 space-y-4">
-        <BottleneckAlert stages={stages} bottlenecks={issues} avgCheck={eco.avgCheck} />
+        <BottleneckAlert stages={stages} bottlenecks={issues} avgCheck={eco.avgCheck} baselineCount={others.length} />
         <KpiCards macros={macros} />
         <div className="grid gap-4 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
           <FunnelSteps stages={stages} extra={period.extra} eco={eco} />
@@ -352,7 +360,13 @@ function PeriodView({
         </div>
       </main>
       <aside className="lg:sticky lg:top-6 lg:h-[calc(100vh-3rem)]">
-        <ChatPanel period={period} product={product} context={context} className="h-[600px] lg:h-full" />
+        <ChatPanel
+          period={period}
+          product={product}
+          baseline={baseline}
+          context={context}
+          className="h-[600px] lg:h-full"
+        />
       </aside>
     </div>
   );

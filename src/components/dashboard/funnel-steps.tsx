@@ -27,7 +27,7 @@ function widths(stages: StageResult[]): number[] {
   });
 }
 
-/** Воронка «Путь людей»: сегмент на каждый шаг, рядом — люди, конверсия из прошлого шага и эталон. */
+/** Воронка «Путь людей»: сегмент на каждый шаг, рядом — люди, конверсия из прошлого шага и ваша обычная конверсия. */
 export function FunnelSteps({
   stages,
   extra,
@@ -43,7 +43,7 @@ export function FunnelSteps({
       <div className="border-b px-4 py-3">
         <div className="text-sm font-medium">Путь людей: от Reels до оплаты</div>
         <div className="text-xs text-muted-foreground">
-          Процент — сколько дошло с прошлого шага; в скобках эталон. Ширина воронки — в логарифмическом масштабе.
+          Процент — сколько дошло с прошлого шага; «обычно» — медиана ваших других периодов. Ширина воронки — в логарифмическом масштабе.
         </div>
       </div>
       <ul className="px-2 py-3 sm:px-4">
@@ -87,8 +87,8 @@ export function FunnelSteps({
                 {s.cr !== null ? (
                   <>
                     <span className={cn("font-medium", st.text)}>{fmtPct(s.cr)}</span>
-                    {s.benchmark !== null && !s.gap && (
-                      <span className="text-xs text-muted-foreground">эталон {fmtPct(s.benchmark)}</span>
+                    {s.baseline !== null && !s.gap && (
+                      <span className="text-xs text-muted-foreground">обычно {fmtPct(s.baseline)}</span>
                     )}
                   </>
                 ) : (
@@ -116,7 +116,7 @@ export function FunnelSteps({
 function noteFor(s: StageResult, extra: Period["extra"]): string | null {
   if (s.missing) return "нет данных — шаг пропущен";
   if (s.external) return "больше прошлого шага: есть люди из других источников";
-  if (s.gap && s.cr !== null) return "через пропущенные шаги — без сравнения с эталоном";
+  if (s.gap && s.cr !== null) return "через пропущенные шаги — без сравнения";
   if (s.id === "tariff" && s.cr !== null) return `${fmtPct(s.cr)} от перешедших на сайт = ${fmtInt(s.value)} чел.`;
   if (s.id === "dm" && extra.automationCr !== undefined) return `конверсия автоматизации ${fmtPct(extra.automationCr, 2)}`;
   if (s.id === "paid" && extra.totalPayments !== undefined) return `всего оплат за период: ${fmtInt(extra.totalPayments)}`;
