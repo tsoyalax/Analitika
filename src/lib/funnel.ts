@@ -58,6 +58,8 @@ export interface StageResult extends StageDef {
   external: boolean;
   /** Для этапа нет данных (0) — его пропускаем при расчёте конверсий. */
   missing: boolean;
+  /** Предыдущий этап пропущен — конверсия идёт через несколько шагов, с эталоном не сравниваем. */
+  gap: boolean;
   /** (cr - benchmark) / benchmark; отрицательное — хуже эталона. */
   deviation: number | null;
   status: StageStatus;
@@ -74,15 +76,17 @@ export function analyzeFunnel(values: StageValues): StageResult[] {
     const value = values[def.id] ?? 0;
     const missing = i > 0 && value === 0;
     const prev = i === 0 ? null : lastKnown;
+    // Предыдущий шаг пропущен: конверсию через несколько шагов с эталоном одного шага не сравниваем.
+    const gap = i > 1 && (values[STAGES[i - 1].id] ?? 0) === 0;
     if (!missing) lastKnown = value;
     const external = !missing && prev !== null && value > prev;
     const cr = prev && !external && !missing ? value / prev : null;
-    const deviation = cr !== null && def.benchmark ? (cr - def.benchmark) / def.benchmark : null;
+    const deviation = cr !== null && !gap && def.benchmark ? (cr - def.benchmark) / def.benchmark : null;
     let status: StageStatus = "neutral";
     if (deviation !== null) {
       status = deviation < -BOTTLENECK_THRESHOLD ? "bad" : deviation < -WARNING_THRESHOLD ? "warn" : "good";
     }
-    return { ...def, value, prev, cr, external, missing, deviation, status, share: value / top };
+    return { ...def, value, prev, cr, external, missing, gap, deviation, status, share: value / top };
   });
 }
 
@@ -117,9 +121,10 @@ export function macroSummary(stages: StageResult[]): MacroResult[] {
   let prevValue: number | null = null;
   return MACRO_STAGES.map((m) => {
     const group = stages.filter((s) => s.macro === m.id);
-    const value = group[group.length - 1]?.value ?? 0;
-    const cr = prevValue ? value / prevValue : null;
-    prevValue = value;
+    // Последний заполненный этап группы; пустые шаги не обнуляют карточку.
+    const value = [...group].reverse().find((s) => !s.missing)?.value ?? 0;
+    const cr = prevValue && value ? value / prevValue : null;
+    if (value) prevValue = value;
     const status = group.reduce<StageStatus>(
       (acc, s) => (STATUS_RANK[s.status] > STATUS_RANK[acc] ? s.status : acc),
       "neutral",

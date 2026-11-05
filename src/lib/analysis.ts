@@ -8,7 +8,7 @@ import {
   worstStage,
   type StageResult,
 } from "./funnel";
-import type { Period } from "./mock-data";
+import type { Period } from "./period";
 import { economics, PRODUCT } from "./products";
 
 /** Текстовый срез воронки — контекст для AI-ассистента. */
@@ -19,10 +19,12 @@ export function funnelContext(period: Period, rnp: string): string {
     const cr = s.missing
       ? "нет данных"
       : s.external
-      ?"больше предыдущего этапа — есть трафик из других источников, конверсия не считается"
-      : s.cr === null
-        ? "—"
-        : `CR ${fmtPct(s.cr)} (эталон ${fmtPct(s.benchmark ?? 0)}, отклонение ${fmtPct(s.deviation ?? 0)})`;
+        ? "больше предыдущего этапа — есть трафик из других источников, конверсия не считается"
+        : s.cr === null
+          ? "—"
+          : s.gap
+            ? `CR ${fmtPct(s.cr)} от последнего заполненного этапа (предыдущий шаг не заполнен, с эталоном не сравниваем)`
+            : `CR ${fmtPct(s.cr)} (эталон ${fmtPct(s.benchmark ?? 0)}, отклонение ${fmtPct(s.deviation ?? 0)})`;
     return `- ${s.label}: ${fmtInt(s.value)} · ${cr} · статус: ${s.status}`;
   });
 
@@ -37,13 +39,15 @@ export function funnelContext(period: Period, rnp: string): string {
     `Продукт: «${PRODUCT.name}» (${PRODUCT.url}). ${PRODUCT.description}`,
     `Тарифы: ${eco.mix.map((t) => `${t.name} — ${fmtRub(t.price)}`).join("; ")}.`,
     "",
-    `Период: ${period.label} (${period.dates})${period.uploaded ? ", данные загружены пользователем" : ""}.`,
+    `Период: ${period.label}${period.dates ? ` (${period.dates})` : ""}.`,
     `Порог узкого места: конверсия хуже эталона более чем на ${fmtPct(BOTTLENECK_THRESHOLD, 0)}.`,
     "Воронка (конверсия — от предыдущего этапа):",
     ...lines,
     ...extra.map((e) => `- ${e}`),
     "",
-    `Продажи по тарифам: ${eco.mix.map((t) => `${t.name}: ${t.count}`).join(", ")}. Выручка ${fmtRub(eco.revenue)}, средний чек ${fmtRub(eco.avgCheck)}.`,
+    eco.sales
+      ? `Продажи по тарифам: ${eco.mix.map((t) => `${t.name}: ${t.count}`).join(", ")}. Выручка ${fmtRub(eco.revenue)}, средний чек ${fmtRub(eco.avgCheck)}.`
+      : "Продажи по тарифам не указаны — выручку и средний чек посчитать нельзя.",
     "",
     "РНП (рабочий недельный план/отчёт):",
     rnp.trim() || "(не загружен)",
@@ -114,7 +118,7 @@ export function localAnalysis(period: Period): string {
     extra === null
       ? "Ниже по воронке есть этап, куда люди приходят в обход этого шага, поэтому потери в оплатах точно не посчитать. Проверьте, что клик по этому шагу правильно считается в аналитике."
       : extra > 0
-        ? `Если вывести этап на эталон, это примерно +${extra.toFixed(1)} оплат ≈ ${fmtRub(extra * eco.avgCheck)} при среднем чеке ${fmtRub(eco.avgCheck)}.`
+        ? `Если вывести этап на эталон, это примерно +${extra.toFixed(1)} оплат${eco.avgCheck ? ` ≈ ${fmtRub(extra * eco.avgCheck)} при среднем чеке ${fmtRub(eco.avgCheck)}` : ""}.`
         : "",
     "",
     "💡 **Гипотеза:** люди доходят до этого шага, но не видят достаточной причины сделать следующее действие — либо мешает трение (лишний шаг, неудобный интерфейс), либо не хватает доверия/аргумента в этот момент.",

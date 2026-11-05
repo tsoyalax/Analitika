@@ -1,5 +1,5 @@
 import { STAGES, type StageId, type StageValues } from "./funnel";
-import type { Period } from "./mock-data";
+import { draftPeriod, type Period } from "./period";
 import { TARIFFS, type SalesMix } from "./products";
 
 // Формат: по строке на метрику, «ключ,значение» (разделитель , ; или таб).
@@ -31,7 +31,7 @@ export interface CsvResult {
   errors: string[];
 }
 
-export function parseFunnelCsv(text: string, fallback: Period): CsvResult {
+export function parseFunnelCsv(text: string, label: string): CsvResult {
   const values: Partial<StageValues> = {};
   const sales: SalesMix = {};
   const extra: Period["extra"] = {};
@@ -75,17 +75,5 @@ export function parseFunnelCsv(text: string, fallback: Period): CsvResult {
   }
 
   const merged = Object.fromEntries(STAGES.map((s) => [s.id, values[s.id] ?? 0])) as StageValues;
-  return {
-    period: {
-      id: "upload",
-      label: "Загруженные",
-      dates: "из CSV",
-      values: merged,
-      sales: Object.keys(sales).length ? sales : fallback.sales,
-      extra,
-      rnp: "",
-      uploaded: true,
-    },
-    errors,
-  };
+  return { period: draftPeriod({ label, dates: "", values: merged, sales, extra }), errors };
 }
