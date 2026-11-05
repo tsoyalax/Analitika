@@ -26,9 +26,25 @@ function num(s: string): number | undefined {
   return s.trim() && Number.isFinite(n) && n >= 0 ? n : undefined;
 }
 
+/** Этапы, которые вводятся сразу в процентах от предыдущего шага: клики по тарифу — от переходов на сайт. */
+const PERCENT_STAGES: StageId[] = ["tariff"];
+
+/** Значение этапа для поля формы: у процентных этапов — процент от предыдущего заполненного шага. */
+function stageInputs(values: Period["values"] | undefined): Record<StageId, string> {
+  const out = {} as Record<StageId, string>;
+  let prev = 0;
+  for (const s of STAGES) {
+    const v = values?.[s.id] ?? 0;
+    out[s.id] = PERCENT_STAGES.includes(s.id) && v && prev ? String(+((v / prev) * 100).toFixed(2)) : str(v);
+    if (v) prev = v;
+  }
+  return out;
+}
+
 /**
- * Этапы воронки: число людей или процент от предыдущего заполненного шага («5%»).
- * Процент сразу переводится в людей — в базе хранятся только абсолютные числа.
+ * Этапы воронки: число людей или процент от предыдущего заполненного шага («5%»;
+ * у процентных этапов знак % не нужен). Процент сразу переводится в людей —
+ * в базе хранятся только абсолютные числа.
  */
 function resolveStages(raw: Record<StageId, string>) {
   const values = {} as Record<StageId, number>;
@@ -36,12 +52,12 @@ function resolveStages(raw: Record<StageId, string>) {
   let prev = 0;
   for (const s of STAGES) {
     const text = raw[s.id].trim();
-    const isPct = text.endsWith("%");
+    const isPct = PERCENT_STAGES.includes(s.id) || text.endsWith("%");
     const n = num(text.replace(/%$/, ""));
     let value = 0;
     if (n !== undefined && isPct) {
       value = prev ? Math.round((n / 100) * prev) : 0;
-      hints[s.id] = prev ? `≈ ${fmtInt(value)} чел.` : "нет пред. шага";
+      hints[s.id] = prev ? `= ${fmtInt(value)} чел.` : "нет пред. шага";
     } else if (n !== undefined) {
       value = Math.round(n);
       if (prev && value) hints[s.id] = fmtPct(value / prev);
@@ -107,7 +123,7 @@ function FormBody({
   const [label, setLabel] = useState(period?.label ?? "");
   const [dates, setDates] = useState(period?.dates ?? "");
   const [values, setValues] = useState<Record<StageId, string>>(
-    Object.fromEntries(STAGES.map((s) => [s.id, str(period?.values[s.id])])) as Record<StageId, string>,
+    stageInputs(period?.values),
   );
   const [sales, setSales] = useState<Record<TariffId, string>>(
     Object.fromEntries(TARIFFS.map((t) => [t.id, str(period?.sales[t.id])])) as Record<TariffId, string>,
@@ -122,7 +138,10 @@ function FormBody({
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    const stageValues = resolveStages(values).values;
+    const resolved = resolveStages(values);
+    const stageValues = resolved.values;
+    const noBase = STAGES.find((s) => resolved.hints[s.id] === "нет пред. шага");
+    if (noBase) return setError(`«${noBase.label}» в процентах: заполните шаг перед ним, чтобы посчитать людей.`);
     if (!label.trim()) return setError("Укажите название периода, например «Неделя 45».");
     if (Object.values(stageValues).filter(Boolean).length < 3) return setError("Заполните хотя бы 3 этапа воронки.");
 
@@ -177,14 +196,34 @@ function FormBody({
         </p>
         {STAGES.map((s, i) => (
           <label key={s.id} className="grid grid-cols-[1fr_6.5rem_4.5rem] items-center gap-2">
-            <span className="text-sm">{s.label}</span>
-            <input
-              className={input}
-              inputMode="decimal"
-              placeholder={i === 0 ? "" : s.id === "tariff" ? "52 или 5%" : "или %"}
-              value={values[s.id]}
-              onChange={(e) => setValues((v) => ({ ...v, [s.id]: e.target.value }))}
-            />
+            <span className="text-sm">
+              {s.label}
+              {PERCENT_STAGES.includes(s.id) && (
+                <span className="block text-xs text-muted-foreground">в % от «{STAGES[i - 1].label}»</span>
+              )}
+            </span>
+            {PERCENT_STAGES.includes(s.id) ? (
+              <div className="relative">
+                <input
+                  className={`${input} pr-6`}
+                  inputMode="decimal"
+                  placeholder="5"
+                  value={values[s.id]}
+                  onChange={(e) => setValues((v) => ({ ...v, [s.id]: e.target.value.replace(/%/g, "") }))}
+                />
+                <span className="pointer-events-none absolute top-1/2 right-2.5 -translate-y-1/2 text-sm text-muted-foreground">
+                  %
+                </span>
+              </div>
+            ) : (
+              <input
+                className={input}
+                inputMode="decimal"
+                placeholder={i === 0 ? "" : "или %"}
+                value={values[s.id]}
+                onChange={(e) => setValues((v) => ({ ...v, [s.id]: e.target.value }))}
+              />
+            )}
             <span className="text-right text-xs text-muted-foreground tabular-nums">{stageHints[s.id] ?? ""}</span>
           </label>
         ))}
