@@ -11,6 +11,7 @@ import { analyzeFunnel, bottlenecks, macroSummary } from "@/lib/funnel";
 import type { Period } from "@/lib/period";
 import { deletePeriod, insertPeriod, loadPeriods, updatePeriod, updateRnp } from "@/lib/periods-store";
 import { economics } from "@/lib/products";
+import { periodFromScreenshots } from "@/lib/screenshots";
 import { getSupabase } from "@/lib/supabase";
 import { AddData } from "./add-data";
 import { BenchmarkChart } from "./benchmark-chart";
@@ -32,7 +33,11 @@ export function Dashboard() {
   const [ready, setReady] = useState(!sb);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [storeError, setStoreError] = useState<string | null>(null);
-  const [form, setForm] = useState<{ open: boolean; period: Period | null }>({ open: false, period: null });
+  const [form, setForm] = useState<{ open: boolean; period: Period | null; isNew: boolean; notice?: string }>({
+    open: false,
+    period: null,
+    isNew: true,
+  });
   const saveTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   const period = periods.find((p) => p.id === periodId) ?? periods[periods.length - 1] ?? null;
@@ -78,7 +83,13 @@ export function Dashboard() {
     setPeriods((prev) => (prev.some((x) => x.id === p.id) ? prev.map((x) => (x.id === p.id ? result : x)) : [...prev, result]));
     setPeriodId(result.id);
     setStoreError(null);
-    setForm({ open: false, period: null });
+    setForm({ open: false, period: null, isNew: true });
+  }
+
+  async function handleScreenshots(files: File[]) {
+    if (sb && !email) throw new Error("Войдите в KaizenHub, чтобы распознавать скриншоты.");
+    const { period: draft, notes } = await periodFromScreenshots(files);
+    setForm({ open: true, period: draft, isNew: true, notice: notes });
   }
 
   async function handleCsv(p: Period) {
@@ -122,7 +133,7 @@ export function Dashboard() {
     } catch {}
   }
 
-  const openNew = () => setForm({ open: true, period: null });
+  const openNew = () => setForm({ open: true, period: null, isNew: true });
 
   return (
     <div className="mx-auto w-full max-w-[1400px] px-4 py-6 lg:px-6">
@@ -158,7 +169,7 @@ export function Dashboard() {
           )}
           {period && (
             <>
-              <Button variant="ghost" size="icon-sm" onClick={() => setForm({ open: true, period })} aria-label="Изменить период">
+              <Button variant="ghost" size="icon-sm" onClick={() => setForm({ open: true, period, isNew: false })} aria-label="Изменить период">
                 <Pencil />
               </Button>
               <Button variant="ghost" size="icon-sm" onClick={handleDelete} aria-label="Удалить период">
@@ -195,13 +206,13 @@ export function Dashboard() {
       {!ready ? (
         <Loader2 className="mx-auto mt-24 size-6 animate-spin text-muted-foreground" />
       ) : !period ? (
-        <EmptyState onManual={openNew} onCsv={handleCsv} canSave={canSave} />
+        <EmptyState onManual={openNew} onCsv={handleCsv} onScreenshots={handleScreenshots} canSave={canSave} />
       ) : (
         <PeriodView
           key={period.id}
           period={period}
           onRnpChange={handleRnpChange}
-          addData={<AddData onManual={openNew} onCsv={handleCsv} />}
+          addData={<AddData onManual={openNew} onCsv={handleCsv} onScreenshots={handleScreenshots} />}
         />
       )}
 
@@ -209,24 +220,36 @@ export function Dashboard() {
         open={form.open}
         onOpenChange={(open) => setForm((f) => ({ ...f, open }))}
         period={form.period}
+        isNew={form.isNew}
+        notice={form.notice}
         onSubmit={savePeriod}
       />
     </div>
   );
 }
 
-function EmptyState({ onManual, onCsv, canSave }: { onManual: () => void; onCsv: (p: Period) => void; canSave: boolean }) {
+function EmptyState({
+  onManual,
+  onCsv,
+  onScreenshots,
+  canSave,
+}: {
+  onManual: () => void;
+  onCsv: (p: Period) => void;
+  onScreenshots: (files: File[]) => Promise<void>;
+  canSave: boolean;
+}) {
   return (
     <div className="mx-auto mt-12 max-w-xl rounded-xl border bg-card p-8 text-center">
       <BarChart3 className="mx-auto size-8 text-indigo-400" />
       <h2 className="mt-4 text-lg font-semibold">Добавьте первый период</h2>
       <p className="mt-2 text-sm text-muted-foreground">
-        Введите цифры воронки за неделю — от охватов Reels до оплат — или загрузите CSV по шаблону. Дашборд посчитает
+        Загрузите скриншоты статистики (бот, директ, Instagram, оплаты) — Claude перепишет с них цифры, — или введите их вручную, или загрузите CSV по шаблону. Дашборд посчитает
         конверсии, найдёт узкие места, а AI-ассистент разберёт их вместе с РНП.
         {canSave && " Периоды сохраняются в ваш аккаунт KaizenHub."}
       </p>
       <div className="mt-6 flex justify-center">
-        <AddData onManual={onManual} onCsv={onCsv} size="default" />
+        <AddData onManual={onManual} onCsv={onCsv} onScreenshots={onScreenshots} size="default" />
       </div>
     </div>
   );

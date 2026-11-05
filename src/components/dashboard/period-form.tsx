@@ -34,30 +34,50 @@ export function PeriodForm({
   open,
   onOpenChange,
   period,
+  isNew,
+  notice,
   onSubmit,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Существующий период для правки или черновик (например, распознанный со скриншотов). */
   period: Period | null;
+  isNew: boolean;
+  /** Пояснение над формой — что распознано и что проверить. */
+  notice?: string;
   onSubmit: (p: Period) => Promise<void>;
 }) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="w-full overflow-y-auto sm:max-w-md">
         <SheetHeader>
-          <SheetTitle>{period ? "Изменить период" : "Новый период"}</SheetTitle>
+          <SheetTitle>{isNew ? "Новый период" : "Изменить период"}</SheetTitle>
           <SheetDescription>
             Обязательны название и хотя бы 3 этапа воронки. Пустые этапы пропускаются в расчёте.
           </SheetDescription>
         </SheetHeader>
+        {notice && (
+          <div className="mx-4 rounded-lg border border-indigo-400/40 bg-indigo-400/5 px-3 py-2 text-xs">
+            <div className="font-medium">Распознано со скриншотов — проверьте цифры перед сохранением.</div>
+            <div className="mt-1 text-muted-foreground">{notice}</div>
+          </div>
+        )}
         {/* key сбрасывает поля при открытии другого периода */}
-        {open && <FormBody key={period?.id ?? "new"} period={period} onSubmit={onSubmit} />}
+        {open && <FormBody key={period?.id ?? "new"} period={period} isNew={isNew} onSubmit={onSubmit} />}
       </SheetContent>
     </Sheet>
   );
 }
 
-function FormBody({ period, onSubmit }: { period: Period | null; onSubmit: (p: Period) => Promise<void> }) {
+function FormBody({
+  period,
+  isNew,
+  onSubmit,
+}: {
+  period: Period | null;
+  isNew: boolean;
+  onSubmit: (p: Period) => Promise<void>;
+}) {
   const [label, setLabel] = useState(period?.label ?? "");
   const [dates, setDates] = useState(period?.dates ?? "");
   const [values, setValues] = useState<Record<StageId, string>>(
@@ -184,7 +204,7 @@ function FormBody({ period, onSubmit }: { period: Period | null; onSubmit: (p: P
       {error && <p className="text-sm text-red-500">{error}</p>}
       <Button type="submit" className="w-full" disabled={saving}>
         {saving && <Loader2 className="animate-spin" />}
-        {period ? "Сохранить изменения" : "Добавить период"}
+        {isNew ? "Добавить период" : "Сохранить изменения"}
       </Button>
     </form>
   );

@@ -1,7 +1,8 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Download, FileUp, Plus } from "lucide-react";
+import { Download, FileUp, ImagePlus, Loader2, Plus } from "lucide-react";
+import { MAX_SCREENSHOTS } from "@/lib/screenshots";
 import { Button } from "@/components/ui/button";
 import { CSV_TEMPLATE, parseFunnelCsv } from "@/lib/csv";
 import type { Period } from "@/lib/period";
@@ -13,18 +14,23 @@ export function downloadTemplate() {
   URL.revokeObjectURL(url);
 }
 
-/** Кнопки «Ввести вручную» / «Загрузить CSV» / шаблон. */
+/** Кнопки «Со скриншотов» / «Ввести вручную» / «Загрузить CSV» / шаблон. */
 export function AddData({
   onManual,
   onCsv,
+  onScreenshots,
   size = "sm",
 }: {
   onManual: () => void;
   onCsv: (p: Period) => void;
+  /** Распознать цифры со снимков; ошибка показывается под кнопками. */
+  onScreenshots: (files: File[]) => Promise<void>;
   size?: "sm" | "default";
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
+  const imageRef = useRef<HTMLInputElement>(null);
   const [errors, setErrors] = useState<string[]>([]);
+  const [reading, setReading] = useState(false);
 
   async function handleFile(file: File) {
     const label = file.name.replace(/\.csv$/i, "").slice(0, 60) || "Период из CSV";
@@ -33,10 +39,27 @@ export function AddData({
     if (period) onCsv(period);
   }
 
+  async function handleImages(files: File[]) {
+    if (files.length > MAX_SCREENSHOTS) return setErrors([`Не больше ${MAX_SCREENSHOTS} скриншотов за раз.`]);
+    setErrors([]);
+    setReading(true);
+    try {
+      await onScreenshots(files);
+    } catch (e) {
+      setErrors([(e as Error).message]);
+    } finally {
+      setReading(false);
+    }
+  }
+
   return (
     <div>
-      <div className="flex flex-wrap items-center gap-2">
-        <Button size={size} onClick={onManual}>
+      <div className="flex flex-wrap items-center justify-center gap-2">
+        <Button size={size} onClick={() => imageRef.current?.click()} disabled={reading}>
+          {reading ? <Loader2 className="animate-spin" /> : <ImagePlus />}
+          {reading ? "Распознаю цифры…" : "Со скриншотов"}
+        </Button>
+        <Button size={size} variant="outline" onClick={onManual}>
           <Plus /> Ввести вручную
         </Button>
         <Button size={size} variant="outline" onClick={() => fileRef.current?.click()}>
@@ -46,6 +69,18 @@ export function AddData({
           <Download /> Шаблон CSV
         </Button>
       </div>
+      <input
+        ref={imageRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp,image/heic,image/heif"
+        multiple
+        className="hidden"
+        onChange={(e) => {
+          const files = Array.from(e.target.files ?? []);
+          if (files.length) handleImages(files);
+          e.target.value = "";
+        }}
+      />
       <input
         ref={fileRef}
         type="file"
