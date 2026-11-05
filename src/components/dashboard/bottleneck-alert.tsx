@@ -1,5 +1,13 @@
-import { AlertTriangle, CheckCircle2, Info } from "lucide-react";
-import { BOTTLENECK_THRESHOLD, extraPaymentsAtBaseline, fmtPct, fmtRub, type StageResult } from "@/lib/funnel";
+import { AlertTriangle, CheckCircle2 } from "lucide-react";
+import {
+  BOTTLENECK_THRESHOLD,
+  DROP_BAD,
+  extraPaymentsAtBaseline,
+  fmtInt,
+  fmtPct,
+  fmtRub,
+  type StageResult,
+} from "@/lib/funnel";
 
 export function BottleneckAlert({
   stages,
@@ -13,24 +21,18 @@ export function BottleneckAlert({
   /** Сколько других периодов легло в «обычную» конверсию. */
   baselineCount: number;
 }) {
-  if (baselineCount === 0) {
-    return (
-      <div className="flex items-start gap-3 rounded-xl border px-4 py-3 text-sm">
-        <Info className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-        <span>
-          Узкие места ищутся сравнением с вашими же прошлыми периодами: каждый шаг — с вашей обычной конверсией
-          (медианой). Добавьте ещё хотя бы один период, и светофор включится.
-        </span>
-      </div>
-    );
-  }
-  const basis = `медиана ${baselineCount} ${plural(baselineCount, "другого периода", "других периодов", "других периодов")}`;
+  // Период один — узкое место там, где отваливается больше 80% людей; иначе — сравнение с медианой других периодов.
+  const single = baselineCount === 0;
+  const basis = single
+    ? `отваливается больше ${fmtPct(DROP_BAD, 0)} людей на шаге`
+    : `медиана ${baselineCount} ${plural(baselineCount, "другого периода", "других периодов", "других периодов")}`;
   if (bottlenecks.length === 0) {
     return (
       <div className="flex items-center gap-3 rounded-xl border border-emerald-500/40 bg-emerald-500/5 px-4 py-3 text-sm">
         <CheckCircle2 className="size-4 shrink-0 text-emerald-500" />
-        Узких мест нет: ни один шаг не хуже вашей обычной конверсии ({basis}) более чем на{" "}
-        {fmtPct(BOTTLENECK_THRESHOLD, 0)}.
+        {single
+          ? `Узких мест нет: ни на одном шаге не отваливается больше ${fmtPct(DROP_BAD, 0)} людей.`
+          : `Узких мест нет: ни один шаг не хуже вашей обычной конверсии (${basis}) более чем на ${fmtPct(BOTTLENECK_THRESHOLD, 0)}.`}
       </div>
     );
   }
@@ -44,6 +46,16 @@ export function BottleneckAlert({
       <ul className="mt-2 space-y-1 text-sm">
         {bottlenecks.map((s) => {
           const extra = extraPaymentsAtBaseline(stages, s);
+          if (single) {
+            return (
+              <li key={s.id}>
+                <span className="font-medium">{s.label}</span>: дошли {fmtPct(s.cr ?? 0)} —{" "}
+                <span className="text-red-500">
+                  отвалилось {fmtPct(1 - (s.cr ?? 0))} ({fmtInt((s.prev ?? 0) - s.value)} чел.)
+                </span>
+              </li>
+            );
+          }
           return (
             <li key={s.id}>
               <span className="font-medium">{s.label}</span>: {fmtPct(s.cr ?? 0)}, обычно у вас {fmtPct(s.baseline ?? 0)}{" "}
