@@ -1,6 +1,8 @@
 import {
   analyzeFunnel,
   BOTTLENECK_THRESHOLD,
+  DROP_BAD,
+  DROP_WARN,
   extraPaymentsAtBaseline,
   fmtInt,
   fmtPct,
@@ -51,7 +53,7 @@ export function funnelContext(
     `Период: ${period.label}${period.dates ? ` (${period.dates})` : ""}.`,
     baselineCount
       ? `«Обычно» — медиана конверсии этого шага по ${baselineCount} другим периодам. Узкое место — хуже обычного более чем на ${fmtPct(BOTTLENECK_THRESHOLD, 0)}.`
-      : "Других периодов нет — сравнивать не с чем, никаких эталонов не используем; оценивай шаги по их относительным потерям и фактам из РНП.",
+      : `Других периодов нет, эталонов не используем. Статус шага — по доле отвалившихся на нём людей: больше ${fmtPct(DROP_BAD, 0)} — узкое место (bad), больше ${fmtPct(DROP_WARN, 0)} — ниже нормы (warn). Переход «охваты → директ» не оцениваем: охваты — просмотры, а не люди.`,
     "Воронка (конверсия — от предыдущего этапа):",
     ...lines,
     ...extra.map((e) => `- ${e}`),
@@ -119,10 +121,8 @@ const SOLUTIONS: Partial<Record<StageResult["id"], { quick: string; content: str
 export function localAnalysis(period: Period, product: Product, baseline: Baseline = {}): string {
   const stages = analyzeFunnel(period.values, baseline);
   const worst = worstStage(stages);
-  if (!worst || (worst.deviation ?? 0) >= 0) {
-    if (!Object.keys(baseline).length) {
-      return "🔍 **Диагностика:** сравнивать пока не с чем — узкие места ищутся по отклонению от вашей обычной конверсии (медианы других периодов). Добавьте ещё хотя бы один период.";
-    }
+  const byDropOff = worst !== null && worst.deviation === null;
+  if (!worst || (!byDropOff && (worst.deviation ?? 0) >= 0) || (byDropOff && worst.status === "good")) {
     return "🔍 **Диагностика:** все этапы на уровне вашей обычной конверсии или выше.\n\n💡 **Гипотеза:** воронка сбалансирована — рост даст масштабирование охватов.\n\n🛠️ **Альтернативные решения:**\n1. **Быстрое:** увеличить частоту Reels.\n2. **Контентное:** повторить форматы, которые дали лучшие охваты.\n3. **Техническое:** настроить сквозную аналитику по каждому ролику.";
   }
   const eco = economics(period.sales, product, period.values.paid);
@@ -130,7 +130,9 @@ export function localAnalysis(period: Period, product: Product, baseline: Baseli
   const s = SOLUTIONS[worst.id];
   const prev = stages[stages.findIndex((x) => x.id === worst.id) - 1];
   return [
-    `🔍 **Диагностика:** сильнее всего просел этап «${worst.label}»: ${fmtPct(worst.cr ?? 0)} из «${prev.label}» при обычных у вас ${fmtPct(worst.baseline ?? 0)} (${fmtPct(worst.deviation ?? 0)}).`,
+    byDropOff
+      ? `🔍 **Диагностика:** сильнее всего теряем людей на шаге «${worst.label}»: дошли ${fmtPct(worst.cr ?? 0)} из «${prev.label}», отвалилось ${fmtPct(1 - (worst.cr ?? 0))}.`
+      : `🔍 **Диагностика:** сильнее всего просел этап «${worst.label}»: ${fmtPct(worst.cr ?? 0)} из «${prev.label}» при обычных у вас ${fmtPct(worst.baseline ?? 0)} (${fmtPct(worst.deviation ?? 0)}).`,
     extra === null
       ? "Ниже по воронке есть этап, куда люди приходят в обход этого шага, поэтому потери в оплатах точно не посчитать. Проверьте, что клик по этому шагу правильно считается в аналитике."
       : extra > 0

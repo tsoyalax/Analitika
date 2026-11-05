@@ -56,6 +56,14 @@ export const STAGES: StageDef[] = [
 export const BOTTLENECK_THRESHOLD = 0.25;
 const WARNING_THRESHOLD = 0.1;
 
+/**
+ * Когда сравнивать не с чем (период один): узкое место — шаг, на котором отваливается
+ * больше 80% людей, «ниже нормы» — больше 50%. Первый шаг (охваты → директ) не оцениваем:
+ * охваты — это просмотры, а не люди.
+ */
+export const DROP_BAD = 0.8;
+export const DROP_WARN = 0.5;
+
 export type StageStatus = "good" | "warn" | "bad" | "neutral";
 
 export interface StageResult extends StageDef {
@@ -102,6 +110,7 @@ export function computeBaseline(others: StageValues[]): Baseline {
 
 export function analyzeFunnel(values: StageValues, baseline: Baseline = {}): StageResult[] {
   const top = values.reach || 1;
+  const hasBaseline = Object.keys(baseline).length > 0;
   let lastKnown: number | null = null;
   return STAGES.map((def, i) => {
     const value = values[def.id] ?? 0;
@@ -117,6 +126,9 @@ export function analyzeFunnel(values: StageValues, baseline: Baseline = {}): Sta
     let status: StageStatus = "neutral";
     if (deviation !== null) {
       status = deviation < -BOTTLENECK_THRESHOLD ? "bad" : deviation < -WARNING_THRESHOLD ? "warn" : "good";
+    } else if (!hasBaseline && cr !== null && !gap && i > 1) {
+      const loss = 1 - cr;
+      status = loss > DROP_BAD ? "bad" : loss > DROP_WARN ? "warn" : "good";
     }
     return { ...def, value, prev, cr, external, missing, gap, baseline: base, deviation, status, share: value / top };
   });
@@ -125,15 +137,22 @@ export function analyzeFunnel(values: StageValues, baseline: Baseline = {}): Sta
 export function bottlenecks(stages: StageResult[]): StageResult[] {
   return stages
     .filter((s) => s.status === "bad")
-    .sort((a, b) => (a.deviation ?? 0) - (b.deviation ?? 0));
+    .sort((a, b) => (a.deviation ?? a.cr ?? 0) - (b.deviation ?? b.cr ?? 0));
 }
 
-/** Этап с самым сильным отклонением от обычной конверсии (даже если он не красный). */
+/**
+ * Самый слабый шаг: с наибольшим отклонением от обычной конверсии, а если сравнивать
+ * не с чем — с наименьшей конверсией среди оценённых шагов (даже если он не красный).
+ */
 export function worstStage(stages: StageResult[]): StageResult | null {
-  return stages.reduce<StageResult | null>(
+  const byDeviation = stages.reduce<StageResult | null>(
     (worst, s) => (s.deviation !== null && (worst === null || s.deviation < (worst.deviation ?? 0)) ? s : worst),
     null,
   );
+  if (byDeviation) return byDeviation;
+  return stages
+    .filter((s) => s.status !== "neutral" && s.cr !== null)
+    .reduce<StageResult | null>((worst, s) => (worst === null || s.cr! < worst.cr! ? s : worst), null);
 }
 
 export interface MacroResult {
