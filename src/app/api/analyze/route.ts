@@ -1,5 +1,4 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { supabaseConfigured, unauthorized, userFromRequest } from "@/lib/server/auth";
 
 const MODEL = "claude-opus-5-5";
 
@@ -24,10 +23,26 @@ interface Body {
   context: string;
 }
 
+/**
+ * Ключ Claude платный — на сайте пускаем только вошедших в KaizenHub.
+ * Если Supabase не настроен (локальная разработка), проверку пропускаем.
+ */
+async function isSignedIn(req: Request): Promise<boolean> {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+  if (!url || !key) return true;
+  const token = (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "");
+  if (!token) return false;
+  const res = await fetch(`${url.replace(/\/$/, "")}/auth/v1/user`, {
+    headers: { apikey: key, Authorization: `Bearer ${token}` },
+  });
+  return res.ok;
+}
+
 export async function POST(req: Request) {
-  // Ключ Claude платный — на сайте пускаем только вошедших в KaizenHub.
-  // Если Supabase не настроен (локальная разработка), проверку пропускаем.
-  if (supabaseConfigured && !(await userFromRequest(req))) return unauthorized();
+  if (!(await isSignedIn(req))) {
+    return Response.json({ error: "unauthorized" }, { status: 401 });
+  }
   if (!process.env.ANTHROPIC_API_KEY) {
     return Response.json({ error: "no_key" }, { status: 503 });
   }
