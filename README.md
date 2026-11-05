@@ -1,36 +1,87 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Аналитика Reels-воронки
 
-## Getting Started
+MVP дашборда сквозной аналитики Reels-воронки: считает конверсию каждого шага, сравнивает с эталоном, подсвечивает узкие места и разбирает воронку вместе с РНП через AI-ассистента на Claude.
 
-First, run the development server:
+**Воронка:** Охваты Reels → Написали в директ → Пришли в бота → Получили статью/подарок → Открыли статью → Дочитали → Перешли на сайт → Нажали кнопку тарифа → Открыли оплату → Купили.
+
+На главном экране:
+
+- **Плашка узких мест**: этапы, где конверсия хуже эталона больше чем на 25%. Для каждого показано, сколько оплат и денег вы потеряли.
+- **4 KPI-карточки** по крупным этапам: Охваты Reels → Запуск бота / Директ → КЭП / Вебинар / Диалог → Оплаты.
+- **Пошаговая воронка**: абсолютные значения, конверсия из прошлого шага и эталон. Если этап больше предыдущего (туда приходят люди из соцсетей и по ссылкам), конверсия не считается.
+- **График «Конверсия к эталону»** (Recharts).
+- **Деньги**: выручка, средний чек, выручка на человека в боте и на 1000 охватов. Цены тарифов взяты с [assets.therykunov.ru](https://assets.therykunov.ru): 25 000 / 80 000 / 290 000 ₽.
+- **РНП и метрики**: текст РНП (вставить или загрузить .txt) и загрузка CSV с цифрами.
+- **AI-ассистент**: кнопка «Проанализировать воронку и РНП» и чат. Ответ всегда идёт в формате 🔍 Диагностика → 💡 Гипотеза → 🛠️ 3 решения (быстрое, контентное, техническое).
+
+## Запуск
+
+Нужен Node.js 20.9+.
 
 ```bash
+npm install
+cp .env.example .env.local   # и впишите ключ
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Откройте http://localhost:3000.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Переменные окружения
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Переменная | Обязательна | Что делает |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | нет | Ключ из [console.anthropic.com](https://console.anthropic.com/settings/keys). Без него ассистент работает в демо-режиме: анализ по правилам, без учёта текста РНП и без свободных вопросов. |
 
-## Learn More
+Ключ используется только на сервере (`src/app/api/analyze/route.ts`) и не попадает в браузер. Модель: `claude-opus-5-5`. Если модель откажется отвечать, запрос автоматически уйдёт на резервную модель (server-side fallback).
 
-To learn more about Next.js, take a look at the following resources:
+## Формат CSV
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Одна строка на метрику: `метрика,значение`. Шаблон скачивается кнопкой ⬇ в блоке «РНП и метрики».
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```csv
+metric,value
+reach,185000
+dm,2246
+bot,1654
+gift,1288
+opened,910
+read,1026
+site,1049
+tariff,52
+checkout,85
+paid,14
+solo,9
+support,4
+turnkey,1
+automation_cr,0.4826
+article_readers,2236
+article_views,2981
+total_payments,20
+```
 
-## Deploy on Vercel
+- Этапы можно указывать по id или по названию («Пришли в бота»).
+- `solo` / `support` / `turnkey` — сколько продано каждого тарифа (по ним считается средний чек).
+- Разделитель: `,`, `;` или табуляция. Пробелы в числах («1 654») допустимы.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Структура
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```
+src/
+  app/
+    page.tsx                 # дашборд
+    api/analyze/route.ts     # стриминг ответа Claude
+  components/
+    dashboard/               # KPI, воронка, график, деньги, ввод данных
+    ai-chat/                 # чат-панель и рендер ответа
+    ui/                      # shadcn/ui
+  lib/
+    funnel.ts                # этапы, эталоны, поиск узких мест
+    products.ts              # тарифы и средний чек
+    mock-data.ts             # Неделя 1 / Неделя 2
+    csv.ts                   # разбор CSV
+    analysis.ts              # контекст для AI и анализ в демо-режиме
+```
+
+## Настройка эталонов
+
+Эталонные конверсии и порог узкого места (`BOTTLENECK_THRESHOLD = 0.25`) задаются в `src/lib/funnel.ts`, в поле `benchmark` у каждого этапа. Сейчас там ориентировочные значения: замените их своими средними за прошлые запуски.
