@@ -32,7 +32,21 @@ npm run dev
 |---|---|---|
 | `ANTHROPIC_API_KEY` | нет | Ключ из [console.anthropic.com](https://console.anthropic.com/settings/keys). Без него ассистент работает в демо-режиме: анализ по правилам, без учёта текста РНП и без свободных вопросов. |
 
-Ключ используется только на сервере (`src/app/api/analyze/route.ts`) и не попадает в браузер. Модель: `claude-opus-5-5`. Если модель откажется отвечать, запрос автоматически уйдёт на резервную модель (server-side fallback).
+| `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | нет | Supabase KaizenHub: общий вход, сохранение периодов и Instagram. Значения публичные (те же, что в `config.js` KaizenHub). |
+| `INSTAGRAM_APP_ID`, `INSTAGRAM_APP_SECRET` | для Instagram | Приложение Meta с продуктом Instagram (вход через Instagram). |
+| `INSTAGRAM_TOKEN_SECRET` | для Instagram | Случайная строка, ей шифруется токен Instagram в базе. |
+
+Ключ Anthropic используется только на сервере (`src/app/api/analyze/route.ts`) и не попадает в браузер. Модель: `claude-opus-5-5`. Если модель откажется отвечать, запрос автоматически уйдёт на резервную модель (server-side fallback).
+
+## Instagram
+
+Кнопка «Подключить Instagram» (видна после входа в KaizenHub) → окно Instagram → «Разрешить». Дашборд забирает все публикации, где в подписи есть слово-фильтр (по умолчанию «активы»), и их статистику за всё время: просмотры, охват, комментарии, сохранения, репосты. Показывает медиану и порог лучших 25% и передаёт сводку AI-ассистенту.
+
+- Нужен бизнес-аккаунт или аккаунт автора. Личные аккаунты Instagram не отдают статистику.
+- Без проверки приложения в Meta (App Review) подключаться могут только аккаунты, добавленные в приложение.
+- Токен живёт 60 дней; сервер продлевает его при каждом «Обновить», если до конца осталось меньше 10 дней.
+- В настройках входа приложения Meta нужен адрес возврата: `https://kaizenhub-nu.vercel.app/funnel/instagram/callback`.
+- Таблицы `instagram_connections` и `instagram_media` — миграция `20261105100000_funnel_instagram.sql` в репозитории kaizenhub.
 
 ## Формат CSV
 

@@ -17,6 +17,7 @@ import { BottleneckAlert } from "./bottleneck-alert";
 import { DataInput } from "./data-input";
 import { EconomicsCard } from "./economics-card";
 import { FunnelSteps } from "./funnel-steps";
+import { InstagramCard } from "./instagram-card";
 import { KpiCards } from "./kpi-cards";
 
 type SaveState = "idle" | "saving" | "saved" | "error";
@@ -40,7 +41,11 @@ export function Dashboard() {
   const macros = useMemo(() => macroSummary(stages), [stages]);
   const issues = useMemo(() => bottlenecks(stages), [stages]);
   const eco = useMemo(() => economics(period.sales), [period]);
-  const context = useMemo(() => funnelContext(period, rnp), [period, rnp]);
+  const [igContext, setIgContext] = useState<string | null>(null);
+  const context = useMemo(
+    () => [funnelContext(period, rnp), igContext].filter(Boolean).join("\n\n"),
+    [period, rnp, igContext],
+  );
 
   // Вход общий с KaizenHub: подхватываем сессию и грузим сохранённые периоды.
   useEffect(() => {
@@ -184,6 +189,7 @@ export function Dashboard() {
               <EconomicsCard eco={eco} values={period.values} />
             </div>
           </div>
+          {sb && <InstagramCard signedIn={Boolean(email)} onContext={setIgContext} />}
           <DataInput
             rnp={rnp}
             onRnpChange={handleRnpChange}
