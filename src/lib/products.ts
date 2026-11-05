@@ -37,7 +37,7 @@ export type SalesMix = Partial<Record<string, number>>;
 
 export interface Economics {
   revenue: number;
-  /** Оплат: по тарифам, а если их нет — из этапа «Купили». */
+  /** Оплат: по тарифам, а если их нет — из этапа «Полная оплата». */
   sales: number;
   avgCheck: number;
   /** Продаж по тарифам нет: выручка = оплаты × средний чек из настроек продукта. */

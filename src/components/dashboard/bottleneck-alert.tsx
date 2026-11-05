@@ -22,54 +22,44 @@ export function BottleneckAlert({
   baselineCount: number;
 }) {
   // Период один — узкое место там, где отваливается больше 80% людей; иначе — сравнение с медианой других периодов.
-  const single = baselineCount === 0;
-  const basis = single
-    ? `отваливается больше ${fmtPct(DROP_BAD, 0)} людей на шаге`
-    : `медиана ${baselineCount} ${plural(baselineCount, "другого периода", "других периодов", "других периодов")}`;
+  const history =
+    baselineCount > 0
+      ? ` или хуже вашей обычной конверсии (медиана ${baselineCount} ${plural(baselineCount, "другого периода", "других периодов", "других периодов")}) на ${fmtPct(BOTTLENECK_THRESHOLD, 0)}+`
+      : "";
+  const rule = `на шаге отваливается больше ${fmtPct(DROP_BAD, 0)} людей${history}`;
   if (bottlenecks.length === 0) {
     return (
       <div className="flex items-center gap-3 rounded-xl border border-emerald-500/40 bg-emerald-500/5 px-4 py-3 text-sm">
         <CheckCircle2 className="size-4 shrink-0 text-emerald-500" />
-        {single
-          ? `Узких мест нет: ни на одном шаге не отваливается больше ${fmtPct(DROP_BAD, 0)} людей.`
-          : `Узких мест нет: ни один шаг не хуже вашей обычной конверсии (${basis}) более чем на ${fmtPct(BOTTLENECK_THRESHOLD, 0)}.`}
+        Узких мест нет: ни на одном шаге не отваливается больше {fmtPct(DROP_BAD, 0)} людей
+        {baselineCount > 0 && " и ни один шаг не просел относительно ваших прошлых периодов"}.
       </div>
     );
   }
   return (
     <div className="rounded-xl border border-red-500 bg-red-500/10 px-4 py-3">
-      <div className="flex items-center gap-2 text-sm font-medium text-red-500">
+      <div className="flex flex-wrap items-center gap-x-2 text-sm font-medium text-red-500">
         <AlertTriangle className="size-4 shrink-0" />
         {bottlenecks.length === 1 ? "Найдено узкое место" : `Найдено узких мест: ${bottlenecks.length}`}
-        <span className="font-normal text-muted-foreground">· сравнение: {basis}</span>
+        <span className="font-normal text-muted-foreground">· {rule}</span>
       </div>
       <ul className="mt-2 space-y-1 text-sm">
         {bottlenecks.map((s) => {
           const extra = extraPaymentsAtBaseline(stages, s);
-          if (single) {
-            return (
-              <li key={s.id}>
-                <span className="font-medium">{s.label}</span>: дошли {fmtPct(s.cr ?? 0)} —{" "}
-                <span className="text-red-500">
-                  отвалилось {fmtPct(1 - (s.cr ?? 0))} ({fmtInt((s.prev ?? 0) - s.value)} чел.)
-                </span>
-              </li>
-            );
-          }
           return (
             <li key={s.id}>
-              <span className="font-medium">{s.label}</span>: {fmtPct(s.cr ?? 0)}, обычно у вас {fmtPct(s.baseline ?? 0)}{" "}
-              <span className="text-red-500">({fmtPct(s.deviation ?? 0, 0)})</span>
+              <span className="font-medium">{s.label}</span>: дошли {fmtInt(s.value)} из {fmtInt(s.prev ?? 0)} (
+              {fmtPct(s.cr ?? 0)}) —{" "}
+              <span className="text-red-500">
+                отвалилось {fmtPct(1 - (s.cr ?? 0))}, {fmtInt((s.prev ?? 0) - s.value)} чел.
+              </span>
+              {s.baseline !== null && s.deviation !== null && (
+                <span className="text-muted-foreground"> · обычно у вас {fmtPct(s.baseline)}</span>
+              )}
               {extra !== null && extra > 0 && avgCheck > 0 && (
                 <span className="text-muted-foreground">
                   {" "}
                   · как обычно ≈ +{extra.toFixed(1)} оплат, +{fmtRub(extra * avgCheck)}
-                </span>
-              )}
-              {extra === null && (
-                <span className="text-muted-foreground">
-                  {" "}
-                  · ниже по воронке есть обходной трафик, потери в деньгах не оцениваем
                 </span>
               )}
             </li>
