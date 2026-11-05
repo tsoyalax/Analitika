@@ -5,7 +5,8 @@ import { Globe, Loader2, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
-import { mergeTariffs, type Product, type Tariff } from "@/lib/products";
+import { fmtRub } from "@/lib/funnel";
+import { meanPrice, mergeTariffs, type Product, type Tariff } from "@/lib/products";
 import { productFromSite } from "@/lib/site-client";
 
 const input =
@@ -40,6 +41,8 @@ export function ProductSheet({
 
 type Row = { id: string; name: string; price: string };
 
+const parsePrice = (s: string) => Number(s.replace(/[\s\u00a0₽]/g, "").replace(",", "."));
+
 const toRows = (tariffs: Tariff[]): Row[] => tariffs.map((t) => ({ id: t.id, name: t.name, price: String(t.price) }));
 
 function ProductBody({ product, onSave }: { product: Product; onSave: (p: Product) => Promise<void> }) {
@@ -47,6 +50,7 @@ function ProductBody({ product, onSave }: { product: Product; onSave: (p: Produc
   const [name, setName] = useState(product.name);
   const [description, setDescription] = useState(product.description);
   const [rows, setRows] = useState<Row[]>(toRows(product.tariffs));
+  const [avg, setAvg] = useState(product.avgCheck ? String(product.avgCheck) : "");
   const [notes, setNotes] = useState<string | null>(null);
   const [busy, setBusy] = useState<"site" | "save" | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -60,7 +64,11 @@ function ProductBody({ product, onSave }: { product: Product; onSave: (p: Produc
       setUrl(r.url);
       if (r.name) setName(r.name);
       if (r.description) setDescription(r.description);
-      if (r.tariffs.length) setRows(toRows(mergeTariffs(product.tariffs, r.tariffs)));
+      if (r.tariffs.length) {
+        const merged = mergeTariffs(product.tariffs, r.tariffs);
+        setRows(toRows(merged));
+        setAvg(String(meanPrice(merged)));
+      }
       setNotes(r.tariffs.length ? r.notes : `Цены не нашёл. ${r.notes}`);
     } catch (e) {
       setError((e as Error).message);
@@ -72,20 +80,32 @@ function ProductBody({ product, onSave }: { product: Product; onSave: (p: Produc
   async function save(e: React.FormEvent) {
     e.preventDefault();
     const tariffs = rows
-      .map((r) => ({ id: r.id, name: r.name.trim(), price: Number(r.price.replace(/[\s ]/g, "").replace(",", ".")) }))
+      .map((r) => ({ id: r.id, name: r.name.trim(), price: parsePrice(r.price) }))
       .filter((t) => t.name);
     if (tariffs.some((t) => !Number.isFinite(t.price) || t.price <= 0)) return setError("У каждого тарифа нужна цена.");
     if (!tariffs.length) return setError("Добавьте хотя бы один тариф.");
+    const avgCheck = parsePrice(avg);
+    if (avg.trim() && !(avgCheck > 0)) return setError("Средний чек — число больше нуля.");
     setBusy("save");
     setError(null);
     try {
-      await onSave({ name: name.trim(), url: url.trim(), description: description.trim(), tariffs });
+      await onSave({
+        name: name.trim(),
+        url: url.trim(),
+        description: description.trim(),
+        tariffs,
+        ...(avg.trim() && { avgCheck: Math.round(avgCheck) }),
+      });
     } catch (err) {
       setError((err as Error).message || "Не удалось сохранить.");
     } finally {
       setBusy(null);
     }
   }
+
+  const suggested = meanPrice(
+    rows.map((r) => ({ id: r.id, name: r.name, price: parsePrice(r.price) })).filter((t) => t.name && t.price > 0),
+  );
 
   const setRow = (i: number, patch: Partial<Row>) => setRows((rs) => rs.map((r, j) => (j === i ? { ...r, ...patch } : r)));
 
@@ -157,6 +177,31 @@ function ProductBody({ product, onSave }: { product: Product; onSave: (p: Produc
           <Plus /> Тариф
         </Button>
       </fieldset>
+
+      <div className="space-y-1">
+        <span className="text-sm font-medium">Средний чек</span>
+        <div className="grid grid-cols-[7rem_1fr] items-center gap-2">
+          <div className="relative">
+            <input
+              className={`${input} pr-6 tabular-nums`}
+              inputMode="numeric"
+              value={avg}
+              onChange={(e) => setAvg(e.target.value)}
+              placeholder={String(suggested || "")}
+            />
+            <span className="pointer-events-none absolute top-1/2 right-2.5 -translate-y-1/2 text-sm text-muted-foreground">₽</span>
+          </div>
+          {suggested > 0 && String(suggested) !== avg.replace(/\s/g, "") && (
+            <Button type="button" variant="ghost" size="sm" className="justify-self-start" onClick={() => setAvg(String(suggested))}>
+              = средняя цена тарифов, {fmtRub(suggested)}
+            </Button>
+          )}
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Нужен, когда у периода не указано, сколько продано каждого тарифа: выручка = «Купили» × средний чек. Если
+          продажи по тарифам есть, средний чек считается по ним. Пусто — берётся средняя цена тарифов.
+        </p>
+      </div>
 
       <p className="text-xs text-muted-foreground">
         Продажи в уже введённых периодах сохраняются для тарифов с тем же названием. Если тариф переименовать или удалить,

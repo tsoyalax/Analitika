@@ -14,7 +14,7 @@ export function EconomicsCard({
   product: Product;
   onEditProduct: () => void;
 }) {
-  const rub = (n: number | null) => (eco.sales && n !== null ? fmtRub(n) : "—");
+  const rub = (n: number | null) => (eco.sales && n !== null ? `${eco.estimated ? "≈ " : ""}${fmtRub(n)}` : "—");
   const metrics = [
     { label: "Выручка", value: rub(eco.revenue) },
     { label: "Средний чек", value: rub(eco.avgCheck) },
@@ -49,10 +49,17 @@ export function EconomicsCard({
           </div>
         ))}
       </div>
-      {!eco.sales && (
+      {eco.estimated ? (
         <p className="mt-3 text-xs text-muted-foreground">
-          Укажите продажи по тарифам (кнопка ✎ у периода), чтобы посчитать выручку и средний чек.
+          Оценка: {values.paid} оплат × средний чек из «Тарифов». Для точного расчёта укажите продажи по тарифам у
+          периода (✎).
         </p>
+      ) : (
+        !eco.sales && (
+          <p className="mt-3 text-xs text-muted-foreground">
+            Укажите «Купили» или продажи по тарифам у периода (✎), чтобы посчитать выручку и средний чек.
+          </p>
+        )
       )}
       <div className="mt-4 space-y-2">
         {eco.mix.map((t) => (

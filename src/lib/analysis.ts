@@ -14,7 +14,7 @@ import { economics, type Product } from "./products";
 /** Текстовый срез воронки — контекст для AI-ассистента. */
 export function funnelContext(period: Period, rnp: string, product: Product): string {
   const stages = analyzeFunnel(period.values);
-  const eco = economics(period.sales, product.tariffs);
+  const eco = economics(period.sales, product, period.values.paid);
   const lines = stages.map((s) => {
     const cr = s.missing
       ? "нет данных"
@@ -45,7 +45,9 @@ export function funnelContext(period: Period, rnp: string, product: Product): st
     ...lines,
     ...extra.map((e) => `- ${e}`),
     "",
-    eco.sales
+    eco.estimated
+      ? `Продажи по тарифам не указаны. Оценка: ${fmtInt(eco.sales)} оплат × средний чек ${fmtRub(eco.avgCheck)} (из настроек продукта) = выручка ≈ ${fmtRub(eco.revenue)}.`
+      : eco.sales
       ? `Продажи по тарифам: ${eco.mix.map((t) => `${t.name}: ${t.count}`).join(", ")}. Выручка ${fmtRub(eco.revenue)}, средний чек ${fmtRub(eco.avgCheck)}.`
       : "Продажи по тарифам не указаны — выручку и средний чек посчитать нельзя.",
     "",
@@ -109,7 +111,7 @@ export function localAnalysis(period: Period, product: Product): string {
   if (!worst || (worst.deviation ?? 0) >= 0) {
     return "🔍 **Диагностика:** все этапы на уровне эталона или выше.\n\n💡 **Гипотеза:** воронка сбалансирована — рост даст масштабирование охватов.\n\n🛠️ **Альтернативные решения:**\n1. **Быстрое:** увеличить частоту Reels.\n2. **Контентное:** повторить форматы, которые дали лучшие охваты.\n3. **Техническое:** настроить сквозную аналитику по каждому ролику.";
   }
-  const eco = economics(period.sales, product.tariffs);
+  const eco = economics(period.sales, product, period.values.paid);
   const extra = extraPaymentsAtBenchmark(stages, worst);
   const s = SOLUTIONS[worst.id];
   const prev = stages[stages.findIndex((x) => x.id === worst.id) - 1];

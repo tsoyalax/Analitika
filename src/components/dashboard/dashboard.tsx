@@ -330,7 +330,7 @@ function PeriodView({
   const stages = useMemo(() => analyzeFunnel(period.values), [period]);
   const macros = useMemo(() => macroSummary(stages), [stages]);
   const issues = useMemo(() => bottlenecks(stages), [stages]);
-  const eco = useMemo(() => economics(period.sales, product.tariffs), [period, product]);
+  const eco = useMemo(() => economics(period.sales, product, period.values.paid), [period, product]);
   const context = useMemo(() => funnelContext(period, period.rnp, product), [period, product]);
 
   return (
@@ -339,7 +339,7 @@ function PeriodView({
         <BottleneckAlert stages={stages} bottlenecks={issues} avgCheck={eco.avgCheck} />
         <KpiCards macros={macros} />
         <div className="grid gap-4 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-          <FunnelSteps stages={stages} extra={period.extra} />
+          <FunnelSteps stages={stages} extra={period.extra} eco={eco} />
           <div className="space-y-4">
             <BenchmarkChart stages={stages} />
             <EconomicsCard eco={eco} values={period.values} product={product} onEditProduct={onEditProduct} />
