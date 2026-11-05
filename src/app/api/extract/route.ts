@@ -26,7 +26,9 @@ const Extracted = z.object({
     site: n(),
     tariff: n(),
     checkout: n(),
+    kep: n(),
     paid: n(),
+    fullpaid: n(),
   }),
   sales: z.array(z.object({ tariff: z.string(), count: z.number() })),
   extra: z.object({ automationCr: n(), articleReaders: n(), articleViews: n(), totalPayments: n() }),
@@ -47,7 +49,9 @@ const prompt = (tariffs: { name: string; price: number }[]) => `На скрин�
 - values.site — «Перешли на сайт продаж».
 - values.tariff — «Нажали кнопку тарифа».
 - values.checkout — «Открыли оплату или оставили заявку».
+- values.kep — проведено КЭП / диагностик (созвонов-диагностик с клиентами).
 - values.paid — «Купили» (из пришедших в этом периоде).
+- values.fullpaid — оплатили полную стоимость (не предоплату и не первый платёж рассрочки).
 - sales — сколько продано каждого тарифа, только если это видно на скриншотах; tariff — название ровно из списка: ${tariffs.map((t) => `«${t.name}» (${t.price} ₽)`).join(", ") || "тарифов нет"}. Чего не видно — не включай.
 - extra.automationCr — «Конверсия» директ-автоматизации, долей от 1 (48,26% → 0.4826).
 - extra.articleReaders / extra.articleViews — «Всего читателей статей» и число просмотров рядом.

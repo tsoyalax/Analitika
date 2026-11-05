@@ -119,6 +119,7 @@ function noteFor(s: StageResult, extra: Period["extra"]): string | null {
   if (s.gap && s.cr !== null) return "через пропущенные шаги — без сравнения";
   if (s.id === "tariff" && s.cr !== null) return `${fmtPct(s.cr)} от перешедших на сайт = ${fmtInt(s.value)} чел.`;
   if (s.id === "dm" && extra.automationCr !== undefined) return `конверсия автоматизации ${fmtPct(extra.automationCr, 2)}`;
+  if (s.id === "fullpaid" && s.cr !== null) return `конверсия в полную оплату: ${fmtPct(s.cr)}`;
   if (s.id === "paid" && extra.totalPayments !== undefined) return `всего оплат за период: ${fmtInt(extra.totalPayments)}`;
   return null;
 }
